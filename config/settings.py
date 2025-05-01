@@ -74,8 +74,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'todai',
+        'USER': 'todai_admin',
+        'PASSWORD' : '1q2w3e4r',
+        'HOST' : 'svc.sel4.cloudtype.app',
+        'PORT' : '31444',
     }
 }
 
