@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "people.apps.PeopleConfig",
+    "emotion.apps.EmotionConfig",
 ]
 
 MIDDLEWARE = [
