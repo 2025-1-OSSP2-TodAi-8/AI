@@ -17,4 +17,4 @@ class Emotion(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name="수정일시")
 
     def __str__(self):
-        return f"{self.user.name}님 {self.date}의 감정: {self.emotion}"
+        return f"유저: {self.user.id}, 일자: {self.date}, 감정: {self.emotion}"
