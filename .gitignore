@@ -1,0 +1,40 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 가상환경
+venv/
+env/
+.venv/
+.envrc
+
+# OS/IDE 파일
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Django
+# 로컬 개발용 DB (SQLite 등)
+db.sqlite3
+# 미디어 업로드 파일
+/media/
+# 수집된 정적 파일 (collectstatic 결과)
+staticfiles/
+
+# 로그 파일
+*.log
+
+# 테스트·커버리지
+htmlcov/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+/test_file/
+
+# 배포용 빌드 아티팩트 (예: React/Vue 번들)
+node_modules/
+dist/
+build/
