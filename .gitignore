@@ -19,7 +19,7 @@ Thumbs.db
 # 로컬 개발용 DB (SQLite 등)
 db.sqlite3
 # 미디어 업로드 파일
-media/
+/media/
 # 수집된 정적 파일 (collectstatic 결과)
 staticfiles/
 
@@ -32,6 +32,7 @@ htmlcov/
 .coverage.*
 .cache
 .pytest_cache/
+/test_file/
 
 # 배포용 빌드 아티팩트 (예: React/Vue 번들)
 node_modules/
