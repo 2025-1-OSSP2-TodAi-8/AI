@@ -13,15 +13,10 @@ def _get_user(user_id):
     except (People.DoesNotExist, ValueError):
         return None
 
+
 @csrf_exempt
 @require_POST
 def emotions_day(request):
-    """
-    POST /api/emotion/day/
-    JSON: { user_id: int, year: int, month: int, day: int }
-    Response: { date: "YYYY-MM-DD", emotion: "감정" }
-    """
-
     try:
         payload = json.loads(request.body)
         user_id = payload["user_id"]
@@ -46,14 +41,10 @@ def emotions_day(request):
         {"date": emotion.date.strftime("%Y-%m-%d"), "emotion": emotion.emotion}
     )
 
+
 @csrf_exempt
 @require_POST
 def emotions_month(request):
-    """
-    POST /api/emotion/month/
-    JSON: { user_id: int, year: int, month: int }
-    Response: { emotions: [ { date: "YYYY-MM-DD", emotion: "감정" }, … ] }
-    """
     try:
         payload = json.loads(request.body)
         user_id = payload["user_id"]
@@ -71,14 +62,10 @@ def emotions_month(request):
     emotions = list(qs.values("date", "emotion"))
     return JsonResponse({"emotions": emotions})
 
+
 @csrf_exempt
 @require_POST
 def emotions_year(request):
-    """
-    POST /api/emotions/year/
-    JSON: { user_id: int, year: int }
-    Response: { emotions: [ { date: "YYYY-MM-DD", emotion: "감정" }, … ] }
-    """
     try:
         payload = json.loads(request.body)
         user_id = payload["user_id"]
