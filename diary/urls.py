@@ -1,3 +1,6 @@
 from django.urls import path
+from .views import *
 
-urlpatterns = []
+urlpatterns = [
+    path("record", RecordAPIView.as_view()),
+]
