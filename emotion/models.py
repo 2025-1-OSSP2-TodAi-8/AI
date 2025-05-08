@@ -1,9 +1,4 @@
 from django.db import models
-
-# Create your models here.
-# emotion/models.py
-
-from django.db import models
 from people.models import People
 
 
