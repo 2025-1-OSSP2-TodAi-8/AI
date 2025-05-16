@@ -26,4 +26,5 @@ urlpatterns = [
     path("test/", views.test),
     path("api/emotion/", include("emotion.urls")),
     path("api/diary/", include("diary.urls")),
+    path("api/people/", include('people.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
