@@ -8,47 +8,55 @@ from django.http import Http404
 import json
 from people.models import People, Sharing
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import PeopleSignupSerializer, SharingSerializer
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+
+#회원가입
+class PeopleSignupView(APIView):
+    permission_classes = [AllowAny]  # 회원가입은 누구나 접근 가능 DRF 클래스형 뷰에선 기본 권한이 IsAuthenticated이므로 명시적으로 AllowAny 지정
+
+    def post(self, request):
+        serializer = PeopleSignupSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "회원가입 성공"}, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 
 # 마이페이지 기본화면
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])  # 인증된 사용자만 접근 가능(토큰 기반 인증 거침)
 def getPeopleInfo(request):
-    data = json.loads(
-        request.body
-    )  # 요청 바디에서 json 형식을 딕셔너리 자료형으로 변환
-    user_id = data.get("user_id")  # key를 이용해 아이디 값 가져오기
-
-    try:
-        person = get_object_or_404(People, id=user_id)
-    except Http404:
-        return JsonResponse({"message": "해당 사용자를 찾을 수 없습니다."}, status=404)
+    
+    user = request.user  # 토큰 인증된 유저 정보
+    person = get_object_or_404(People, id=user.id) #???????
 
     sharings = Sharing.objects.filter(owner=person, share_state="matched")
 
     if sharings.exists():
-        sharing_data = [
-            {
-                "protector_id": sharing.shared_with.id,  # 연동된 보호자 계정주 id
-                "protector_name": sharing.shared_with.name,  # 연동된 보호자 계정주 이름
-                "relation": sharing.relation,
-                "공개범위": sharing.share_range,
-            }
-            for sharing in sharings
-        ]
+        serializer = SharingSerializer(sharings, many=True) #many=true로 해놓으면 반복문 효과
+        sharing_data = serializer.data
     else:
         sharing_data = None
+    
+    #Response
+    return Response({
+        "user_id": person.id,
+        "name": person.name,
+        "sharing": sharing_data,
+    })
 
-    # JSON 포맷으로 데이터 반환
-    return JsonResponse(
-        {"user_id": person.id, "name": person.name, "sharing": sharing_data}
-    )
 
 
 # 이메일 수정
 """
 이메일 수정 요청의 데이터포맷: {"user_id": 1, "new_email":"address@naver.com"}
 """
-
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -88,7 +96,6 @@ def update_email(request):
 
 요청 포맷: {"user_id": 1, "protector_id:=2, "공개범위": "partial"}
 """
-
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -139,7 +146,6 @@ def update_showrange(request):
     return JsonResponse(
         {"message": "공개범위가 성공적으로 수정되었습니다."}, status=200
     )
-
 
 # 아이디 검색
 """
@@ -222,7 +228,6 @@ def accept_sharing_request(request):
 연결끊기 요청의 데이터포맷: {"user_id": 1, "shared_with":"연결 사용자 아이디?"}
 """
 
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def disconnect_sharing(request):
@@ -253,6 +258,7 @@ def disconnect_sharing(request):
         return JsonResponse({"message": "JSON 형식 오류"}, status=400)
     except Exception as e:
         return JsonResponse({"message": f"서버 오류: {str(e)}"}, status=500)
+
 
 
 """ 

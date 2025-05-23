@@ -1,10 +1,35 @@
 from django.db import models
+from django.contrib.auth.models import AbstractUser
 
 
-class test(models.Model):
-    test = models.CharField(max_length=50, primary_key=True, null=False)
+class People(AbstractUser):
+    USER_TYPE_CHOICES = [
+        ("user", "일반 사용자"),
+        ("guardian", "보호자"),
+    ]
+
+    GENDER_CHOICES = [
+        ("male", "남성"),
+        ("female", "여성"),
+    ]
+
+    # username 필드는 AbstractUser에 이미 존재하므로 별도 선언 불필요 (기존에 아이디로 쓴 string_id 대신 username을 아이디로 사용 예정정)
+    name = models.CharField(max_length=100)
+    email = models.EmailField(unique=True)
+    user_type = models.CharField(max_length=10, choices=USER_TYPE_CHOICES, default="user")
+    birthdate = models.DateField(null=True, blank=True)  # 생년월일
+    gender = models.CharField(max_length=10, choices=GENDER_CHOICES)
+
+    first_name = models.CharField(max_length=30, blank=True)  # blank=True 추가
+    last_name = models.CharField(max_length=150, blank=True)  # blank=True 추가
+
+    # 기본 USERNAME_FIELD는 'username'이라 별도 선언 필요 없음
+
+    def __str__(self):
+        return self.name
 
 
+'''
 class People(models.Model):
     USER_TYPE_CHOICES = [
         ("user", "일반 사용자"),
@@ -26,6 +51,8 @@ class People(models.Model):
 
     def __str__(self):
         return self.name
+
+'''
 
 
 class Sharing(models.Model):
