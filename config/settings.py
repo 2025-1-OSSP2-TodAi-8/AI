@@ -43,7 +43,35 @@ INSTALLED_APPS = [
     "people",
     "emotion",
     "diary",
+
+    'rest_framework', #추가
+    'rest_framework_simplejwt',  #추가
 ]
+
+
+#추가
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+
+#토큰 유효기간 조정
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),  # 액세스 토큰 유효기간 15분
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),     # 리프레시 토큰 유효기간 7일
+}
+
+#추가
+AUTH_USER_MODEL = 'people.People'
+
+
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -79,7 +107,6 @@ WSGI_APPLICATION = "config.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
- 
 
     "default": {
             "ENGINE": "django.db.backends.postgresql",
