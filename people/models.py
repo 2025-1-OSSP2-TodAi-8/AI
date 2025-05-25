@@ -29,7 +29,7 @@ class People(AbstractUser):
         return self.name
 
 
-'''
+"""
 class People(models.Model):
     USER_TYPE_CHOICES = [
         ("user", "일반 사용자"),
@@ -52,7 +52,7 @@ class People(models.Model):
     def __str__(self):
         return self.name
 
-'''
+"""
 
 
 class Sharing(models.Model):
