@@ -2,8 +2,8 @@ from django.urls import path
 from .views import *
 
 urlpatterns = [
-    path("record", RecordAPIView.as_view()),
-    path("marking", MarkingAPIView.as_view()),
-    path("marked_year", MarkedYearAPIView.as_view()),
-    path("marked_month", MarkedMonthAPIView.as_view()),
+    path("record", record),
+    path("marking", marking),
+    path("marked_year", get_marked_year),
+    path("marked_month", get_marked_month),
 ]
