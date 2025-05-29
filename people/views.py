@@ -1,10 +1,8 @@
-from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods  ##
 from django.views.decorators.http import require_POST  ##
-from django.shortcuts import get_object_or_404
-from django.http import Http404
+
 import json
 from people.models import People, Sharing
 
@@ -30,12 +28,16 @@ class PeopleSignupView(APIView):
     
 
 # 마이페이지 기본화면
+"""
+요청 데이터포맷: 
+- header에 액세스 토큰 정보
+- json body에는 따로 포함할 데이터 없음.
+"""
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])  # 인증된 사용자만 접근 가능(토큰 기반 인증 거침)
 def getPeopleInfo(request):
     
-    user = request.user  # 토큰 인증된 유저 정보
-    person = get_object_or_404(People, id=user.id) #???????
+    person = request.user  # 토큰 인증된 유저 정보
 
     sharings = Sharing.objects.filter(owner=person, share_state="matched")
 
@@ -45,7 +47,6 @@ def getPeopleInfo(request):
     else:
         sharing_data = None
     
-    #Response
     return Response({
         "user_id": person.id,
         "name": person.name,
@@ -53,39 +54,61 @@ def getPeopleInfo(request):
     })
 
 
-
 # 이메일 수정
 """
-이메일 수정 요청의 데이터포맷: {"user_id": 1, "new_email":"address@naver.com"}
+요청 데이터포맷: 
+{ 
+    "new_email":"address@naver.com"
+}
 """
-
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def update_email(request):
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"message": "잘못된 JSON 형식입니다."}, status=400)
-
-    user_id = data.get("user_id")
-    new_email = data.get("new_email")
+    new_email = request.data.get("new_email")
 
     if not new_email or "@" not in new_email:
-        return JsonResponse({"message": "유효한 이메일이 아닙니다."}, status=400)
+        return Response({"message": "유효한 이메일이 아닙니다."}, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        person = get_object_or_404(People, id=user_id)
-    except Http404:
-        return JsonResponse({"message": "해당 사용자를 찾을 수 없습니다."}, status=404)
+    person = request.user  # People 모델의 인증된 사용자
 
     try:
         person.email = new_email
         person.save()
     except Exception as e:
-        return JsonResponse({"error": f"이메일 수정 실패: {str(e)}"}, status=500)
+        return Response({"error": f"이메일 수정 실패: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    return JsonResponse({"message": "이메일이 성공적으로 수정되었습니다."}, status=200)
+    return Response({"message": "이메일이 성공적으로 수정되었습니다."}, status=status.HTTP_200_OK)
+
+
+#비밀번호 수정
+'''
+요청 데이터포맷: 
+{
+    "current_password": "old_password123",
+    "new_password": "new_password456"
+} 
+'''
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_password(request):
+    current_password=request.data.get("current_password")
+    new_password=request.data.get("new_password")
+
+    if not current_password or not new_password:
+        return Response({"messege": "현제 비밀번호와 새 비밀번호 모두 입력하세요."}, status=status.HTTP_400_BAD)
+    
+    person = request.user  # 인증된 사용자
+
+    if not person.check_password(current_password):
+        return Response({"message": "현재 비밀번호가 일치하지 않습니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        person.set_password(new_password)
+        person.save()
+    except Exception as e:
+        return Response({"error": f"비밀번호 수정 실패: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    return Response({"message": "비밀번호가 성공적으로 수정되었습니다."}, status=status.HTTP_200_OK)
 
 
 # 공개범위 수정
@@ -95,111 +118,68 @@ def update_email(request):
 이 기능은, 프론트에 연동된 사용자 블록이 뜬 상태에서, 그 블록을 클릭한 다음 수정이 이루어진다.
 다대다 관계일 수 있으므로, 반드시 사용자 id와 보호자 id 모두를 요청 json 포맷에 포함시킨다.
 
-요청 포맷: {"user_id": 1, "protector_id:=2, "공개범위": "partial"}
+요청 데이터포맷:
+{
+  "protector_id": 2,
+  "공개범위": "partial"
+}
 """
-
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def update_showrange(request):
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"message": "잘못된 JSON 형식입니다."}, status=400)
 
-    user_id = data.get("user_id")
+    data=request.data
+    owner = request.user
+
     protector_id = data.get("protector_id")
     new_range = data.get("공개범위")  # 'private' / 'partial' / 'full'
 
-    if user_id is None or protector_id is None or new_range is None:
-        return JsonResponse(
-            {"message": "user_id, protector_id 또는 공개범위가 누락되었습니다."},
-            status=400,
+    if protector_id is None or new_range is None:
+         return Response(
+            {"message": "protector_id 또는 공개범위가 누락되었습니다."},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
     try:
-        owner = People.objects.get(id=user_id)
-        protector = People.objects.get(id=protector_id)
-    except People.DoesNotExist:
-        return JsonResponse(
-            {"message": "사용자 또는 보호자를 찾을 수 없습니다."}, status=404
-        )
-
-    try:
-        sharing = Sharing.objects.get(owner=owner, shared_with=protector)
+        sharing = Sharing.objects.get(owner=owner, shared_with=protector_id)
     except Sharing.DoesNotExist:
-        return JsonResponse({"message": "공유 관계가 존재하지 않습니다."}, status=404)
-
-    # 공유 상태가 matched 인지 확인
-    if sharing.share_state != "matched":
-        return JsonResponse(
-            {"message": "아직 연동이 완료되지 않은 보호자입니다."}, status=403
+        return Response(
+            {"message": "공유 관계가 존재하지 않습니다."},
+            status=status.HTTP_404_NOT_FOUND
         )
 
+    # 공유 상태가 matched 인지 확인(기본적으로, 연동관계가 있어야 마이페이지에서 공개범위 수정 요청도 가능하나, 악의적인 요청 예방 위해 추가)
+    if sharing.share_state != "matched":
+        return Response(
+            {"message": "아직 연동이 완료되지 않은 보호자입니다."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
     VALID_RANGE = ["private", "partial", "full"]
     if new_range not in VALID_RANGE:
-        return JsonResponse(
-            {"message": f"공개범위 값은 {VALID_RANGE} 중 하나여야 합니다."}, status=400
+        return Response(
+            {"message": f"공개범위 값은 {VALID_RANGE} 중 하나여야 합니다."},
+            status=status.HTTP_400_BAD_REQUEST
         )
 
-    sharing.share_range = new_range
-    sharing.save()
+    try:
+        sharing.share_range = new_range
+        sharing.save()
+    except Exception as e:
+        return Response(
+            {"message": f"공개범위 수정 중 오류가 발생했습니다: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
-    return JsonResponse(
-        {"message": "공개범위가 성공적으로 수정되었습니다."}, status=200
+    return Response(
+        {
+            "message": "공개범위가 성공적으로 수정되었습니다.",
+            "updated_range": new_range,
+            "protector_id": protector_id
+        },
+        status=status.HTTP_200_OK
     )
 
-# 아이디 검색
-"""
-요청 포맷: { "search_id": "ididid" }
-응답 포맷: { "exists": true, "name": "사용자 이름", }
-"""
-
-
-@csrf_exempt
-def search_user_by_id(request):
-    if request.method == "POST":
-        data = json.loads(request.body)
-        string_id = data.get("string_id")
-        try:
-            user = People.objects.get(string_id=string_id)
-            return JsonResponse(
-                {"exists": True, "name": user.name, "found_id": user.string_id}
-            )
-        except People.DoesNotExist:
-            return JsonResponse({"exists": False})
-
-
-# 연동 요청 처리(string_id 기반)
-"""
-요청 JSON 예시: { "requester_id": 1, "target_string_id": "some_user_id", "relation": "father" }
-"""
-
-
-@csrf_exempt
-@require_POST
-def handle_sharing_request(request):
-    data = json.loads(request.body)
-    requester_id = data.get("requester_id")  # shared_with
-    target_string_id = data.get("target_string_id")  # string_id로 owner 조회
-    relation = data.get("relation")
-
-    try:
-        owner = People.objects.get(string_id=target_string_id)
-    except People.DoesNotExist:
-        return JsonResponse(
-            {"error": "요청 대상 사용자가 존재하지 않습니다."}, status=404
-        )
-
-    try:
-        shared_with = People.objects.get(id=requester_id)
-    except People.DoesNotExist:
-        return JsonResponse({"error": "요청자 사용자가 존재하지 않습니다."}, status=404)
-
-    if Sharing.objects.filter(owner=owner, shared_with=shared_with).exists():
-        return JsonResponse({"message": "이미 연동 요청을 보냈습니다."}, status=400)
-
-    Sharing.objects.create(owner=owner, shared_with=shared_with, relation=relation)
-    return JsonResponse({"message": "연동 요청을 보냈습니다."})
 
 
 # 연동 요청 수락 처리
@@ -261,11 +241,3 @@ def disconnect_sharing(request):
         return JsonResponse({"message": f"서버 오류: {str(e)}"}, status=500)
 
 
-
-""" 
-회원가입 로직!!(아이디 중복 불가)
-회원가입 시 비밀번호 암호화 로직
-비밀번호 수정 로직
-회원가입 시 유효한 이메일인지지 검증 로직
-로그인 로직(JWT이용용)
-"""

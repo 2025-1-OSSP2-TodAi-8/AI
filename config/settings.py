@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "people",
     "emotion",
     "diary",
+    "share"
 
     'rest_framework', #추가
     'rest_framework_simplejwt',  #추가
@@ -64,7 +65,7 @@ REST_FRAMEWORK = {
 #토큰 유효기간 조정
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),  # 액세스 토큰 유효기간 15분
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # 액세스 토큰 유효기간 15분
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),     # 리프레시 토큰 유효기간 30일
 }
 
