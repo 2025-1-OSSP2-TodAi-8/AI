@@ -1,186 +1,156 @@
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status, parsers, permissions
-from people.models import People
-from emotion.models import Emotion
-from .models import Diary
 import datetime
+from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+
+from .models import Diary
+from people.models import People
 
 
-class RecordAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-    parser_classes = [parsers.MultiPartParser, parsers.FormParser]
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser])
+def record(request):
+    user = request.user
+    date_str = request.data.get("date")
+    audio = request.FILES.get("audio")
 
-    def post(self, request, *args, **kwargs):
-        user_id = request.data.get("user_id")
-        audio = request.FILES.get("audio")
-        date_str = request.data.get("date")
-
-        if not all([user_id, audio, date_str]):
-            return Response(
-                {"success": 0, "emotion": [], "text": "항목 누락"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            user = People.objects.get(pk=user_id)
-        except People.DoesNotExist:
-            return Response(
-                {"success": 0, "emotion": [], "text": "존재하지 않는 유저"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        try:
-            diary_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return Response(
-                {"success": 0, "emotion": [], "text": "잘못된 날짜 형식 (YYYY-MM-DD)"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        emotion_obj, created = Emotion.objects.get_or_create(
-            user=user, date=diary_date, defaults={"emotion": ""}
+    if not date_str or not audio:
+        return Response(
+            {"success": 0, "emotion": [], "text": "데이터 누락"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
+    try:
+        date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return Response(
+            {"success": 0, "emotion": [], "text": "날짜형식 불일치"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    diary = Diary.objects.filter(user=user, date=date).first()
+
+    if diary:
+        diary.audio = audio
+        diary.date = date
+        diary.save(update_fields=["audio", "date"])
+    else:
         diary = Diary.objects.create(
-            user=user, audio=audio, date=diary_date, emotion=emotion_obj
+            user=user, date=date, audio=audio, emotion=[0, 0, 0, 0, 0, 0, 0]
         )
 
+    return Response(
+        {"success": 1, "emotion": diary.emotion, "text": diary.summary or ""},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def marking(request):
+
+    user = request.user
+    date_str = request.data.get("date")
+    if not date_str:
         return Response(
-            {"success": 1, "emotion": [0, 0, 0, 0, 0, 0, 0], "text": ""},
-            status=status.HTTP_200_OK,
+            {"success": 0, "message": "date 누락"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
-
-class MarkingAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-    parser_classes = [parsers.JSONParser, parsers.FormParser]
-
-    def post(self, request, *args, **kwargs):
-        user_id = request.data.get("user_id")
-        date_str = request.data.get("date")
-        People.objects.get(pk=user_id)
-
-        if not all([user_id, date_str]):
-            return Response(
-                {"success": 0, "message": "필드 누락"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            user = People.objects.get(pk=user_id)
-        except People.DoesNotExist:
-            return Response(
-                {"success": 0, "message": "존재하지 않는 사용자"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        try:
-            target_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            return Response(
-                {"success": 0, "message": "date 형식 오류"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            diary = Diary.objects.get(user=user, date=target_date)
-        except Diary.DoesNotExist:
-            return Response(
-                {"success": 0, "message": "해당 날짜의 일기를 찾을 수 없음"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        diary.marking = not diary.marking
-        diary.save(update_fields=["marking"])
-
+    # 날짜 파싱
+    try:
+        date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
         return Response(
-            {
-                "success": 1,
-            },
-            status=status.HTTP_200_OK,
+            {"success": 0, "message": "잘못된 date 형식 (YYYY-MM-DD)"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
+    diary = Diary.objects.filter(user=user, date=date).first()
 
-class MarkedYearAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-    parser_classes = [parsers.JSONParser, parsers.FormParser]
-
-    def post(self, request, *args, **kwargs):
-        user_id = request.data.get("user_id")
-        year = request.data.get("year")
-
-        if not all([user_id, year]):
-            return Response(
-                {"success": 0, "message": "필드 누락"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            user = People.objects.get(pk=user_id)
-        except People.DoesNotExist:
-            return Response(
-                {"success": 0, "message": "존재하지 않는 사용자"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        diaries = Diary.objects.filter(
-            user=user, marking=True, date__year=year
-        ).select_related("emotion")
-
-        emotions = []
-        for diary in diaries:
-            if diary.emotion:
-                emotions.append(
-                    {
-                        "date": diary.date.strftime("%Y-%m-%d"),
-                        "emotion": diary.emotion.emotion,
-                    }
-                )
+    if not diary:
         return Response(
-            {"emotions": emotions},
-            status=status.HTTP_200_OK,
+            {"success": 0, "message": f"{date_str}의 일기를 찾을 수 없습니다."},
+            status=status.HTTP_404_NOT_FOUND,
         )
 
+    diary.marking = not diary.marking
+    diary.save(update_fields=["marking"])
 
-class MarkedMonthAPIView(APIView):
-    permission_classes = [permissions.AllowAny]
-    parser_classes = [parsers.JSONParser, parsers.FormParser]
+    return Response(
+        {"success": 1, "marking": diary.marking},
+        status=status.HTTP_200_OK,
+    )
 
-    def post(self, request, *args, **kwargs):
-        user_id = request.data.get("user_id")
-        year = request.data.get("year")
-        month = request.data.get("month")
 
-        if not all([user_id, year, month]):
-            return Response(
-                {"success": 0, "message": "필드 누락"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포", "중립"]
 
-        try:
-            user = People.objects.get(pk=user_id)
-        except People.DoesNotExist:
-            return Response(
-                {"success": 0, "message": "존재하지 않는 사용자"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
 
-        diaries = Diary.objects.filter(
-            user=user, marking=True, date__year=year, date__month=month
-        ).select_related("emotion")
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_marked_year(request):
+    user = request.user
+    year = request.data.get("year")
 
-        emotions = []
-        for diary in diaries:
-            if diary.emotion:
-                emotions.append(
-                    {
-                        "date": diary.date.strftime("%Y-%m-%d"),
-                        "emotion": diary.emotion.emotion,
-                        "summary": diary.summary,
-                    }
-                )
-        return Response(
-            {"emotions": emotions},
-            status=status.HTTP_200_OK,
-        )
+    if year is None:
+        return Response({"error": "year 필수가 누락되었습니다."}, status=400)
+    try:
+        year = int(year)
+    except (ValueError, TypeError):
+        return Response({"error": "year는 정수여야 합니다."}, status=400)
+
+    diaries = Diary.objects.filter(
+        user=user,
+        marking=True,
+        date__year=year,
+    ).order_by("date")
+
+    emotions = []
+    for d in diaries:
+        probs = d.emotion or []
+        if len(probs) == len(EMOTION_LABELS):
+            idx = max(range(len(probs)), key=lambda i: probs[i])
+            label = EMOTION_LABELS[idx]
+        else:
+            label = ""
+        emotions.append({"date": d.date.isoformat(), "emotion": label})
+
+    return Response({"emotions": emotions}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_marked_month(request):
+    user = request.user
+    year = request.data.get("year")
+    month = request.data.get("month")
+
+    if year is None or month is None:
+        return Response({"error": "year or month 필수가 누락되었습니다."}, status=400)
+    try:
+        year = int(year)
+        month = int(month)
+    except (ValueError, TypeError):
+        return Response({"error": "year, month는 정수여야 합니다."}, status=400)
+
+    diaries = Diary.objects.filter(
+        user=user,
+        marking=True,
+        date__year=year,
+        date__month=month,
+    ).order_by("date")
+
+    emotions = []
+    for d in diaries:
+        probs = d.emotion or []
+        if len(probs) == len(EMOTION_LABELS):
+            idx = max(range(len(probs)), key=lambda i: probs[i])
+            label = EMOTION_LABELS[idx]
+        else:
+            label = ""
+        emotions.append({"date": d.date.isoformat(), "emotion": label})
+
+    return Response({"emotions": emotions}, status=200)

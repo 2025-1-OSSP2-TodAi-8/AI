@@ -43,35 +43,42 @@ INSTALLED_APPS = [
     "people",
     "emotion",
     "diary",
+<<<<<<< HEAD
     "share"
 
     'rest_framework', #추가
     'rest_framework_simplejwt',  #추가
+=======
+    "rest_framework",  # 추가
+    "rest_framework_simplejwt",  # 추가
+>>>>>>> b61e85f80254f8f38aff285317e25178d217b6ac
 ]
 
 
-#추가
+# 추가
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
-    ),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
 }
 
 
-#토큰 유효기간 조정
+# 토큰 유효기간 조정
 from datetime import timedelta
+
 SIMPLE_JWT = {
+<<<<<<< HEAD
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),  # 액세스 토큰 유효기간 15분
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),     # 리프레시 토큰 유효기간 30일
+=======
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),  # 액세스 토큰 유효기간 15분
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # 리프레시 토큰 유효기간 7일
+>>>>>>> b61e85f80254f8f38aff285317e25178d217b6ac
 }
 
-#추가
-AUTH_USER_MODEL = 'people.People'
-
+# 추가
+AUTH_USER_MODEL = "people.People"
 
 
 MIDDLEWARE = [
@@ -108,16 +115,15 @@ WSGI_APPLICATION = "config.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-
     "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": env("DB_NAME"),
-            "USER": env("DB_USER"),
-            "PASSWORD": env("PASSWORD"),
-            "HOST": env("HOST"),
-            "PORT": env("PORT"),
-        }
-}   
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("DB_NAME"),
+        "USER": env("DB_USER"),
+        "PASSWORD": env("PASSWORD"),
+        "HOST": env("HOST"),
+        "PORT": env("PORT"),
+    }
+}
 
 
 # Password validation
