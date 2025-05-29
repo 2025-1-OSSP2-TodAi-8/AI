@@ -27,5 +27,5 @@ urlpatterns = [
     path("api/emotion/", include("emotion.urls")),
     path("api/diary/", include("diary.urls")),
     path("api/people/", include('people.urls')),
-    path("api/share", include('share.urls')),
+    path("api/share/", include('share.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
