@@ -18,4 +18,6 @@ urlpatterns=[
     path('signin', TokenObtainPairView.as_view(), name='token_obtain_pair'), #로그인
     path('signin/refresh', TokenRefreshView.as_view(), name='token_refresh'), #리프레시 토큰 요청
     path('logout', LogoutView.as_view(), name='logout' ), #로그아웃
+    path('search', views.search_user_by_id),
+    path('sharing/request', views.handle_sharing_request),
 ]

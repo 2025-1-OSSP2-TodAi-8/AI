@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     "people",
     "emotion",
     "diary",
-    "share",
+
 
     'rest_framework', #추가
     'rest_framework_simplejwt',  #추가
