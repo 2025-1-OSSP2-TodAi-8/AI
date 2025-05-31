@@ -65,6 +65,7 @@ class Sharing(models.Model):
     STATE_CHOICES = [
         ("unmatched", "연동 대기"),
         ("matched", "연동 완료"),
+        ("rejected", "연동 거절"),
     ]
 
     RELATION_CHOICES = [
