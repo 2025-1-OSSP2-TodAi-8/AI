@@ -13,6 +13,7 @@ from .serializers import PeopleSignupSerializer, SharingSerializer
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
 #회원가입
 class PeopleSignupView(APIView):
@@ -95,7 +96,7 @@ def update_password(request):
     new_password=request.data.get("new_password")
 
     if not current_password or not new_password:
-        return Response({"messege": "현제 비밀번호와 새 비밀번호 모두 입력하세요."}, status=status.HTTP_400_BAD)
+        return Response({"message": "현재 비밀번호와 새 비밀번호 모두 입력하세요."}, status=status.HTTP_400_BAD_REQUEST)
     
     person = request.user  # 인증된 사용자
 
@@ -116,7 +117,6 @@ def update_password(request):
 보호자 연동 정보 블록 클릭 시 체크박스나 radio 버튼 등으로 공개범위 수정 가능하도록
 버튼 체크하고, 저장 버튼 누르면 요청 오도록 한다.
 이 기능은, 프론트에 연동된 사용자 블록이 뜬 상태에서, 그 블록을 클릭한 다음 수정이 이루어진다.
-다대다 관계일 수 있으므로, 반드시 사용자 id와 보호자 id 모두를 요청 json 포맷에 포함시킨다.
 
 요청 데이터포맷:
 {
@@ -148,7 +148,7 @@ def update_showrange(request):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 공유 상태가 matched 인지 확인(기본적으로, 연동관계가 있어야 마이페이지에서 공개범위 수정 요청도 가능하나, 악의적인 요청 예방 위해 추가)
+    # 공유 상태가 matched 인지 확인(기본적으로, 연동관계가 matchd여야 마이페이지에서 공개범위 수정 요청도 가능하나, 악의적인 요청 예방 위해 추가)
     if sharing.share_state != "matched":
         return Response(
             {"message": "아직 연동이 완료되지 않은 보호자입니다."},
@@ -184,60 +184,105 @@ def update_showrange(request):
 
 # 연동 요청 수락 처리
 """
-요청 JSON 예시: { "share_id": 10 }  #sharing 테이블의 primary키
-월별 데이터 조회화면(메인화면) API에, sharing 테이블의 튜플이 unmatched인 경우 notification 정보 같이 주는 코드 추가해야함. 
+요청 JSON 예시: 
+{ 
+"sharing_id": 10 
+"action": accept OR reject
+}  #sharing 테이블의 primary키
+
+월별 데이터 조회화면(메인화면) API에, sharing 테이블의 튜플 중 현재 로그인한 사용자의 아이디이고, unmatched인 경우 notification 정보 같이 주는 코드 추가해야함. 
+unmatched이면, 메인화면 뷰에서 응답 json에 notification: 10(이 번호는 Sharing 테이블의 primary키) 추가하도록 추정해야함
 """
-
-
-@csrf_exempt
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def accept_sharing_request(request):
-    data = json.loads(request.body)
-    share_id = data.get("share_id")
+    sharing_id = request.data.get("sharing_id")
+    action=request.data.get("action")
 
+    if sharing_id is None or action is None:
+        return Response(
+            {"message": "sharing_id와 action 필드 중 누락된 데이터가 있습니다."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if action not in ["accept", "reject"]:
+        return Response(
+            {"message": "action은 'accept' 또는 'reject'만 가능합니다."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
     try:
-        share = Sharing.objects.get(id=share_id)
-        share.share_state = "matched"
+        share = Sharing.objects.get(id=sharing_id, owner=request.user)
+
+        if action == "accept":
+            share.share_state = "matched"
+        elif action == "reject":
+            share.share_state = "rejected"
+
         share.save()
-        return JsonResponse({"message": "연동 요청을 수락했습니다."})
+        return Response({"message": f"연동 요청리 {action}되었습니다."})
+    
     except Sharing.DoesNotExist:
-        return JsonResponse({"error": "해당 요청이 존재하지 않습니다."}, status=404)
+        return Response({"error": "해당 연동 요청이 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
 
 
 # disconnect_sharing(request)함수
 """
-연결끊기 요청의 데이터포맷: {"user_id": 1, "shared_with":"연결 사용자 아이디?"}
+연결끊기 요청의 데이터포맷: {"shared_with":"연결 보호자 기본키(마이페이지의 연동 정보 표시할 때 데이터 포함되어 있음)"}
 """
-
-@csrf_exempt
-@require_http_methods(["POST"])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def disconnect_sharing(request):
     try:
-        data = json.loads(request.body)
-        owner_id = data.get("user_id")
-        shared_with_id = data.get("shared_with")
+        owner=request.user
+        shared_with = request.data.get("shared_with")
 
-        if not owner_id or not shared_with_id:
-            return JsonResponse({"message": "요청 데이터가 불완전합니다."}, status=400)
+        if  not shared_with:
+            return Response({"message": "shared_with 필드가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # matched 상태의 공유 관계만 삭제
-        sharing = Sharing.objects.filter(
-            owner_id=owner_id, shared_with_id=shared_with_id, share_state="matched"
+        Sharing_data = Sharing.objects.filter(
+            owner=owner,
+            shared_with_id=shared_with,
+            share_state="matched"
         )
 
-        if sharing.exists():
-            sharing.delete()
-            return JsonResponse(
-                {"message": "공유 관계가 성공적으로 삭제되었습니다."}, status=200
-            )
+        if Sharing_data.exists():
+            # 삭제 대신 상태 변경(거절)
+            Sharing_data.update(share_state="rejected")
+            return Response({"message": "연동 끊기 성공"}, status=status.HTTP_200_OK)
         else:
-            return JsonResponse(
-                {"message": "해당 공유 관계가 존재하지 않습니다."}, status=404
+            return Response({"message": "해당 공유 관계가 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({"message": f"서버 오류: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+#로그아웃
+'''
+요청 데이터포맷:
+{
+    "refresh": "리프레시토큰문자열"
+}
+'''
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        try:
+            refresh_token=request.data["refresh"] 
+
+            token=RefreshToken(refresh_token) #토큰 객체로 변환
+            token.blacklist()
+
+            return Response(
+                {"message": "로그아웃 완료"},
+                status=status.HTTP_205_RESET_CONTENT
             )
 
-    except json.JSONDecodeError:
-        return JsonResponse({"message": "JSON 형식 오류"}, status=400)
-    except Exception as e:
-        return JsonResponse({"message": f"서버 오류: {str(e)}"}, status=500)
+        except KeyError:
+            return Response({"error": "Refresh 토큰이 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+        except TokenError as e:
+            return Response({"error": f"유효하지 않은 토큰입니다: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
