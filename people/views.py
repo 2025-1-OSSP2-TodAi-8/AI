@@ -222,7 +222,7 @@ def accept_sharing_request(request):
             share.share_state = "rejected"
 
         share.save()
-        return Response({"message": f"연동 요청리 {action}되었습니다."})
+        return Response({"message": f"연동 요청이 {action}되었습니다."})
     
     except Sharing.DoesNotExist:
         return Response({"error": "해당 연동 요청이 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
@@ -435,3 +435,60 @@ def emotions_month_protector(request):
         "user_id": user_id,
         "emotions": emotions
     }, status=200)
+
+
+#보호자 페이지_공개범위 1_ 즐겨찾기
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_marked_month_for_caregiver(request):
+    protector = request.user
+    user_id = request.data.get("user_id")
+    year = request.data.get("year")
+    month = request.data.get("month")
+
+    if user_id is None or year is None or month is None:
+        return Response({"error": "user_id, year, month 모두 필요합니다."}, status=400)
+
+    try:
+        user_id = int(user_id)
+        year = int(year)
+        month = int(month)
+    except (ValueError, TypeError):
+        return Response({"error": "user_id, year, month는 정수여야 합니다."}, status=400)
+
+    # 타겟 사용자 존재 여부 확인
+    try:
+        target_user = People.objects.get(id=user_id)
+    except People.DoesNotExist:
+        return Response({"error": "해당 사용자가 존재하지 않습니다."}, status=404)
+
+
+    allowed = Sharing.objects.filter(
+        owner=target_user,
+        shared_with=protector,
+        share_state="matched",
+        share_range__in=["partial", "full"],
+    ).exists()
+
+    if not allowed:
+        return Response({"error": "연동 권한이 없거나 공개 범위가 적절하지 않습니다."}, status=403)
+
+    # Diaries 조회 (target_user의 marking=True, year, month 조건)
+    diaries = Diary.objects.filter(
+        user=target_user,
+        marking=True,
+        date__year=year,
+        date__month=month,
+    ).order_by("date")
+
+    emotions = []
+    for d in diaries:
+        probs = d.emotion or []
+        if len(probs) == len(EMOTION_LABELS):
+            idx = max(range(len(probs)), key=lambda i: probs[i])
+            label = EMOTION_LABELS[idx]
+        else:
+            label = ""
+        emotions.append({"date": d.date.isoformat(), "emotion": label})
+
+    return Response({"emotions": emotions}, status=200)

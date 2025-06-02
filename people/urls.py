@@ -22,5 +22,6 @@ urlpatterns=[
     path('search', views.search_user_by_id), #아이디 검색
     path('sharing/request', views.handle_sharing_request), #연동 요청 보내기
 
-    path('share/month',views.emotions_month_protector)
+    path('share/month',views.emotions_month_protector), #보호자
+    path('share/marked',views.get_marked_month_for_caregiver)
 ] 
