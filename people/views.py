@@ -5,6 +5,8 @@ from django.views.decorators.http import require_POST  ##
 
 import json
 from people.models import People, Sharing
+from diary.models import Diary
+from emotion.models import Emotion
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -151,7 +153,7 @@ def update_showrange(request):
     # 공유 상태가 matched 인지 확인(기본적으로, 연동관계가 matchd여야 마이페이지에서 공개범위 수정 요청도 가능하나, 악의적인 요청 예방 위해 추가)
     if sharing.share_state != "matched":
         return Response(
-            {"message": "아직 연동이 완료되지 않은 보호자입니다."},
+            {"message": "연동 되지 않은 보호자 계정입니다."},
             status=status.HTTP_403_FORBIDDEN
         )
     
@@ -318,7 +320,7 @@ def search_user_by_id(request):
 """
 요청 데이터포맷: 
 { 
-    "target_user_id": "some_user_id", 
+    "target_user_id": "some_user_id",
     "relation": "son" 
 }
 """
@@ -360,3 +362,76 @@ def handle_sharing_request(request):
         {"message": "연동 요청을 보냈습니다."},
         status=status.HTTP_201_CREATED
     )
+
+
+EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포", "중립"]
+
+#보호자 페이지
+'''
+요청 데이터포맷:
+{
+    "user_id" : 1,
+	"year" : 2024, 
+	"month" : 5 
+}
+'''
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def emotions_month_protector(request):
+    protector = request.user  # 보호자(로그인한 사용자)
+
+    year = request.data.get("year")
+    month = request.data.get("month")
+    user_id = request.data.get("user_id")  # 감정 기록 조회 대상
+
+    if not all([year, month, user_id]):
+        return Response({"error": "year, month, user_id 모두 필요합니다."}, status=400)
+
+    try:
+        year = int(year)
+        month = int(month)
+        user_id = int(user_id)
+        if not (1 <= month <= 12):
+            raise ValueError
+    except (ValueError, TypeError):
+        return Response(
+            {"error": "year, month, user_id 유효한 정수여야 하며, month는 1~12여야 합니다."},
+            status=400
+        )
+
+    # 연결된 사용자 가져오기
+    try:
+        owner = People.objects.get(id=user_id)
+    except People.DoesNotExist:
+        return Response({"error": "연결된 사용자가 존재하지 않습니다."}, status=404)
+
+    # 연동 상태 확인
+    try:
+        sharing = Sharing.objects.get(owner=owner, shared_with=protector)
+        if sharing.share_state != "matched":
+            return Response({"error": "아직 연동이 완료되지 않았습니다."}, status=403)
+        
+    except Sharing.DoesNotExist:
+        return Response({"error": "연동 관계가 존재하지 않습니다."}, status=404)
+
+    # 감정 기록 조회
+    diaries = Diary.objects.filter(
+        user=owner, date__year=year, date__month=month
+    ).order_by("date")
+
+    emotions = []
+    for d in diaries:
+        probs = d.emotion or []
+        if len(probs) == len(EMOTION_LABELS):
+            idx = max(range(len(probs)), key=lambda i: probs[i])
+            label = EMOTION_LABELS[idx]
+        else:
+            label = ""
+
+        emotions.append({"date": d.date.isoformat(), "emotion": label})
+
+    return Response({
+        "user_name": owner.name,
+        "user_id": user_id,
+        "emotions": emotions
+    }, status=200)

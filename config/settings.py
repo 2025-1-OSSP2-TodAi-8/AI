@@ -68,7 +68,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),     # 리프레시 토큰 유효기간 30일
 
     'BLACKLIST_AFTER_ROTATION': False,
-    'ROTATE_REFRESH_TOKENS': False,
+    'ROTATE_REFRESH_TOKENS': False, 
 }
 
 # 추가
