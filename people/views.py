@@ -11,7 +11,7 @@ from emotion.models import Emotion
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import PeopleSignupSerializer, SharingSerializer
+from .serializers import PeopleSignupSerializer, SharingSerializer, RequestedSharingSerializer
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -43,17 +43,24 @@ def getPeopleInfo(request):
     person = request.user  # 토큰 인증된 유저 정보
 
     sharings = Sharing.objects.filter(owner=person, share_state="matched")
-
     if sharings.exists():
         serializer = SharingSerializer(sharings, many=True) #many=true로 해놓으면 반복문 효과
         sharing_data = serializer.data
     else:
         sharing_data = None
     
+    requested_sharings=Sharing.objects.filter(owner=person, share_state="unmatched")
+    if requested_sharings.exists():
+        serializer = RequestedSharingSerializer(requested_sharings, many=True) #many=true로 해놓으면 반복문 효과
+        requested_sharing_data = serializer.data
+    else:
+        requested_sharing_data = None
+
     return Response({
         "user_id": person.id,
         "name": person.name,
         "sharing": sharing_data,
+        "notification": requested_sharing_data
     })
 
 

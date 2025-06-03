@@ -57,7 +57,7 @@ class Sharing(models.Model):
     share_range = models.CharField(
         max_length=10, choices=RANGE_CHOICES, default="private"
     )  
-    #연동 상태 (default: 대기 /matched: 연결중/ rejected: 요청 거절됨)
+    #연동 상태 (default: unmatched /matched: 연결중/ rejected: 요청 거절됨)
     share_state = models.CharField(
         max_length=10, choices=STATE_CHOICES, default="unmatched"
     )  

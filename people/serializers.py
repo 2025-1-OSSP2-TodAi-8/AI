@@ -41,3 +41,13 @@ class SharingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sharing
         fields = ['protector_id', 'protector_name', '공개범위']
+
+#마이페이지로 응답 시에, 요청 들어온 데이터 있으면 같이 보내주기
+class RequestedSharingSerializer(serializers.ModelSerializer):
+    sharing_id = serializers.IntegerField(source='id')
+    protector_name = serializers.CharField(source='shared_with.name')
+    공개범위 = serializers.CharField(source='share_range')
+
+    class Meta:
+        model = Sharing
+        fields = ['sharing_id', 'protector_name', '공개범위']
