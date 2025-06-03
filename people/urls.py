@@ -6,11 +6,10 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import CustomTokenObtainPairView
 
 urlpatterns=[
-    path('',views.getPeopleInfo),
+    path('',views.getPeopleInfo), #마이페이지지
     path('update/email', views.update_email),
     path('delete/connection',views.disconnect_sharing),
     path('update/showrange', views.update_showrange), #공개 범위 변경
-
     path('update/password', views.update_password),
 
     path('sharing/accept', views.accept_sharing_request), #연동 요청 수락
@@ -23,6 +22,6 @@ urlpatterns=[
     path('search', views.search_user_by_id), #아이디 검색
     path('sharing/request', views.handle_sharing_request), #연동 요청 보내기
 
-    path('share/month',views.emotions_month_for_protector), #보호자
-    path('share/marked',views.get_marked_month_for_protector)
+    path('share/month',views.emotions_month_for_protector), #보호자_월별
+    path('share/marked',views.get_marked_month_for_protector) #보호자_즐겨찾기
 ] 

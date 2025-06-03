@@ -1,7 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
-
 class People(AbstractUser):
     USER_TYPE_CHOICES = [
         ("user", "일반 사용자"),

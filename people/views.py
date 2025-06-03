@@ -28,8 +28,6 @@ class PeopleSignupView(APIView):
     
 
 #로그인
-
-
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
@@ -129,10 +127,6 @@ def update_password(request):
 
 # 공개범위 수정
 """
-보호자 연동 정보 블록 클릭 시 체크박스나 radio 버튼 등으로 공개범위 수정 가능하도록
-버튼 체크하고, 저장 버튼 누르면 요청 오도록 한다.
-이 기능은, 프론트에 연동된 사용자 블록이 뜬 상태에서, 그 블록을 클릭한 다음 수정이 이루어진다.
-
 요청 데이터포맷:
 {
   "protector_id": 2,
@@ -156,19 +150,13 @@ def update_showrange(request):
         )
 
     try:
-        sharing = Sharing.objects.get(owner=owner, shared_with=protector_id)
+        sharing = Sharing.objects.get(owner=owner, shared_with=protector_id, share_state="matched")
     except Sharing.DoesNotExist:
         return Response(
             {"message": "공유 관계가 존재하지 않습니다."},
             status=status.HTTP_404_NOT_FOUND
         )
 
-    # 공유 상태가 matched 인지 확인(기본적으로, 연동관계가 matchd여야 마이페이지에서 공개범위 수정 요청도 가능하나, 악의적인 요청 예방 위해 추가)
-    if sharing.share_state != "matched":
-        return Response(
-            {"message": "연동 되지 않은 보호자 계정입니다."},
-            status=status.HTTP_403_FORBIDDEN
-        )
     
     VALID_RANGE = ["private", "partial", "full"]
     if new_range not in VALID_RANGE:
@@ -196,111 +184,6 @@ def update_showrange(request):
     )
 
 
-
-# 연동 요청 수락 처리
-"""
-요청 JSON 예시: 
-{ 
-"sharing_id": 10 
-"action": accept OR reject
-}  #sharing 테이블의 primary키
-
-월별 데이터 조회화면(메인화면) API에, sharing 테이블의 튜플 중 현재 로그인한 사용자의 아이디이고, unmatched인 경우 notification 정보 같이 주는 코드 추가해야함. 
-unmatched이면, 메인화면 뷰에서 응답 json에 notification: 10(이 번호는 Sharing 테이블의 primary키) 추가하도록 추정해야함
-"""
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def accept_sharing_request(request):
-    sharing_id = request.data.get("sharing_id")
-    action=request.data.get("action")
-
-    if sharing_id is None or action is None:
-        return Response(
-            {"message": "sharing_id와 action 필드 중 누락된 데이터가 있습니다."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    if action not in ["accept", "reject"]:
-        return Response(
-            {"message": "action은 'accept' 또는 'reject'만 가능합니다."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    try:
-        share = Sharing.objects.get(id=sharing_id, owner=request.user)
-
-        if action == "accept":
-            share.share_state = "matched"
-        elif action == "reject":
-            share.share_state = "rejected"
-
-        share.save()
-        return Response({"message": f"연동 요청이 {action}되었습니다."})
-    
-    except Sharing.DoesNotExist:
-        return Response({"error": "해당 연동 요청이 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
-
-
-# disconnect_sharing(request)함수
-"""
-연결끊기 요청의 데이터포맷: {"shared_with":"연결 보호자 기본키(마이페이지의 연동 정보 표시할 때 데이터 포함되어 있음)"}
-"""
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def disconnect_sharing(request):
-    try:
-        owner=request.user
-        shared_with = request.data.get("shared_with")
-
-        if  not shared_with:
-            return Response({"message": "shared_with 필드가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
-
-        Sharing_data = Sharing.objects.filter(
-            owner=owner,
-            shared_with_id=shared_with,
-            share_state="matched"
-        )
-
-        if Sharing_data.exists():
-            # 삭제 대신 상태 변경(거절)
-            Sharing_data.update(share_state="rejected")
-            return Response({"message": "연동 끊기 성공"}, status=status.HTTP_200_OK)
-        else:
-            return Response({"message": "해당 공유 관계가 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
-
-    except Exception as e:
-        return Response({"message": f"서버 오류: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-#로그아웃
-'''
-요청 데이터포맷:
-{
-    "refresh": "리프레시토큰문자열"
-}
-'''
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-    def post(self, request):
-        try:
-            refresh_token=request.data["refresh"] 
-
-            token=RefreshToken(refresh_token) #토큰 객체로 변환
-            token.blacklist()
-
-            return Response(
-                {"message": "로그아웃 완료"},
-                status=status.HTTP_205_RESET_CONTENT
-            )
-
-        except KeyError:
-            return Response({"error": "Refresh 토큰이 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
-        except TokenError as e:
-            return Response({"error": f"유효하지 않은 토큰입니다: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
 # 아이디 검색
 """
 요청 포맷: { "search_id": "ididid" }
@@ -313,7 +196,7 @@ def search_user_by_id(request):
 
     if not search_id:
         return Response(
-            {"message": "search_id 누락되었습니다."},
+            {"message": "search_id가가 누락되었습니다."},
             status=status.HTTP_400_BAD_REQUEST
         )
     
@@ -388,6 +271,109 @@ def handle_sharing_request(request):
         },
         status=status.HTTP_201_CREATED
     )
+
+# 연동 요청 수락 처리
+"""
+요청 JSON 예시: 
+{ 
+"sharing_id": 10 
+"action": accept OR reject
+}  #sharing 테이블의 primary키
+
+마이페이지 API에, sharing 테이블의 튜플 중 현재 로그인한 사용자의 아이디이고, unmatched인 경우 notification 정보 같이 주는 코드 추가해야함. 
+unmatched이면, 메인화면 뷰에서 응답 json에 notification 정보 추가해야함
+"""
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def accept_sharing_request(request):
+    sharing_id = request.data.get("sharing_id")
+    action=request.data.get("action")
+
+    if sharing_id is None or action is None:
+        return Response(
+            {"message": "sharing_id와 action 필드 중 누락된 데이터가 있습니다."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if action not in ["accept", "reject"]:
+        return Response(
+            {"message": "action은 'accept' 또는 'reject'만 가능합니다."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        share = Sharing.objects.get(id=sharing_id, owner=request.user, share_state="unmatched")
+
+        if action == "accept":
+            share.share_state = "matched"
+        elif action == "reject":
+            share.share_state = "rejected"
+
+        share.save()
+        return Response({"message": f"연동 요청이 {action}되었습니다."})
+    
+    except Sharing.DoesNotExist:
+        return Response({"message": "해당 연동 요청이 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+
+# disconnect_sharing(request)함수
+"""
+연결끊기 요청의 데이터포맷: {"shared_with":"연결 보호자 기본키(마이페이지의 연동 정보 표시할 때 데이터 포함되어 있음)"}
+"""
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def disconnect_sharing(request):
+    try:
+        owner=request.user
+        shared_with = request.data.get("shared_with")
+
+        if not shared_with:
+            return Response({"message": "shared_with 필드가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        Sharing_data = Sharing.objects.filter(
+            owner=owner,
+            shared_with_id=shared_with,
+            share_state="matched"
+        )
+
+        if Sharing_data.exists():
+            # 삭제 대신 상태 변경(거절)
+            Sharing_data.update(share_state="rejected")
+            return Response({"message": "연동 끊기 성공"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"message": "연동된 공유 관계가 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({"message": f"서버 오류: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+#로그아웃
+'''
+요청 데이터포맷:
+{
+    "refresh": "리프레시토큰문자열"
+}
+'''
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        try:
+            refresh_token=request.data["refresh"] 
+
+            token=RefreshToken(refresh_token) #토큰 객체로 변환
+            token.blacklist()
+
+            return Response(
+                {"message": "로그아웃 완료"},
+                status=status.HTTP_205_RESET_CONTENT
+            )
+
+        except KeyError:
+            return Response({"message": "Refresh 토큰이 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+        except TokenError as e:
+            return Response({"message": f"유효하지 않은 토큰입니다: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
 EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포", "중립"]
