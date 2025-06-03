@@ -22,6 +22,9 @@ urlpatterns=[
     path('search', views.search_user_by_id), #아이디 검색
     path('sharing/request', views.handle_sharing_request), #연동 요청 보내기
 
+    
     path('share/month',views.emotions_month_for_protector), #보호자_월별
-    path('share/marked',views.get_marked_month_for_protector) #보호자_즐겨찾기
+    path('share/marked/month',views.get_marked_month_for_protector), #보호자_즐겨찾기
+    path('share/marked/year', views.get_marked_year_for_protector),
+    path('share/day',views.emotions_day_for_protector)
 ] 

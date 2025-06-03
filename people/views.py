@@ -1,6 +1,7 @@
 from people.models import People, Sharing
 from diary.models import Diary
 from emotion.models import Emotion
+import datetime
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -418,19 +419,11 @@ def emotions_month_for_protector(request):
         return Response({"error": "연결된 사용자가 존재하지 않습니다."}, status=404)
 
     # 연동 상태 확인
-    sharing = Sharing.objects.filter(
-        owner=target_user,
-        shared_with=protector,
-        share_state="matched",
-    ).first()
+    sharing = Sharing.objects.filter(owner=target_user, shared_with=protector, share_state="matched",).first()
     if not sharing:
         return Response({"error": "연동된 사용자가 아닙니다."}, status=403)
     
-    allowed = ["private", "partial", "full"]
-    if sharing.share_range not in allowed:
-        return Response({"error": "해당 사용자의 페이지는 비공개입니다."}, status=403)
-
-
+    
     # 감정 기록 조회
     diaries = Diary.objects.filter(
         user=target_user, date__year=year, date__month=month
@@ -454,7 +447,55 @@ def emotions_month_for_protector(request):
     }, status=200)
 
 
-#보호자 페이지_공개범위 1_ 즐겨찾기
+
+#보호자 페이지_공개범위 1_ 즐겨찾기_연간
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_marked_year_for_protector(request):
+    protector = request.user
+    user_id = request.data.get("user_id")
+    year = request.data.get("year")
+
+    if user_id is None or year is None:
+        return Response({"error": "user_id, year 모두 필요합니다."}, status=400)
+
+    try:
+        user_id = int(user_id)
+        year = int(year)
+    except (ValueError, TypeError):
+        return Response({"error": "user_id, year는 정수여야 합니다."}, status=400)
+
+    # 타겟 사용자 존재 여부 확인
+    try:
+        target_user = People.objects.get(id=user_id)
+    except People.DoesNotExist:
+        return Response({"error": "해당 사용자가 존재하지 않습니다."}, status=404)
+
+    # 연동 상태 확인
+    sharing = Sharing.objects.filter(owner=target_user, shared_with=protector, share_state="matched",).first()
+    if not sharing:
+        return Response({"error": "연동된 사용자가 아닙니다."}, status=403)
+
+    # 마킹된 일기 조회 (연도 기준)
+    diaries = Diary.objects.filter(user=target_user, marking=True, date__year=year).order_by("date")
+
+    emotions = []
+    for d in diaries:
+        probs = d.emotion or []
+        if len(probs) == len(EMOTION_LABELS):
+            idx = max(range(len(probs)), key=lambda i: probs[i])
+            label = EMOTION_LABELS[idx]
+        else:
+            label = ""
+
+        emotions.append({
+            "date": d.date.isoformat(),
+            "emotion": label
+        })
+
+    return Response({"user_name": target_user.name, "user_id": user_id, "emotions": emotions}, status=200)
+
+#보호자 페이지_공개범위 1_ 즐겨찾기_월별
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def get_marked_month_for_protector(request):
@@ -479,20 +520,10 @@ def get_marked_month_for_protector(request):
     except People.DoesNotExist:
         return Response({"error": "해당 사용자가 존재하지 않습니다."}, status=404)
 
-
     # 연동 상태 확인
-    sharing = Sharing.objects.filter(
-        owner=target_user,
-        shared_with=protector,
-        share_state="matched",
-    ).first()
+    sharing = Sharing.objects.filter(owner=target_user, shared_with=protector, share_state="matched",).first()
     if not sharing:
         return Response({"error": "연동된 사용자가 아닙니다."}, status=403)
-    
-    allowed = ["partial", "full"]
-    if sharing.share_range not in allowed:
-        return Response({"error": "해당 페이지는 비공개 처리 되었습니다."}, status=403)
-
 
     # Diaries 조회 (target_user의 marking=True, year, month 조건)
     diaries = Diary.objects.filter(
@@ -510,11 +541,92 @@ def get_marked_month_for_protector(request):
             label = EMOTION_LABELS[idx]
         else:
             label = ""
-        emotions.append(
-            {
-                "date": d.date.isoformat(), 
-                "emotion": label,
-                "summary": d.summary
-            })
 
-    return Response({"emotions": emotions}, status=200)
+        item = {
+            "date": d.date.isoformat(),
+            "emotion": label,
+        }
+
+        if sharing.share_range == "full":
+            item["summary"] = d.summary  # full에서만 summary 포함
+
+        emotions.append(item)
+
+    return Response({"user_name": target_user.name, "user_id": user_id, "emotions": emotions}, status=200)
+
+
+#보호자 day 상세조회
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def emotions_day_for_protector(request):
+    protector = request.user
+
+    user_id = request.data.get("user_id")
+    year = request.data.get("year")
+    month = request.data.get("month")
+    day = request.data.get("day")
+
+    if user_id is None or year is None or month is None or day is None:
+        return Response(
+            {"error": "user_id, year, month, day 모두 필요합니다."},
+            status=400,
+        )
+
+    try:
+        user_id = int(user_id)
+        year = int(year)
+        month = int(month)
+        day = int(day)
+    except (ValueError, TypeError):
+        return Response(
+            {"error": "user_id, year, month, day는 정수여야 합니다."},
+            status=400,
+        )
+
+    # 타겟 사용자 존재 여부 확인
+    try:
+        target_user = People.objects.get(id=user_id)
+    except People.DoesNotExist:
+        return Response({"message": "해당 사용자가 존재하지 않습니다."}, status=404)
+
+    # 연동 상태 및 공개 범위 확인
+    sharing = Sharing.objects.filter(owner=target_user, shared_with=protector, share_state="matched",).first()
+    if not sharing:
+        return Response({"message": "연동된 사용자가 아닙니다."}, status=403)
+
+    if sharing.share_range != "full":
+        return Response({"message": "비공개된 페이지입니다."}, status=403)
+
+    # 날짜 처리
+    try:
+        target_date = datetime.date(year, month, day)
+    except (ValueError, TypeError):
+        return Response(
+            {"error": "유효한 날짜(year, month, day) 형식이 아닙니다."},
+            status=400,
+        )
+
+    try:
+        diary = Diary.objects.get(user=target_user, date=target_date)
+    except Diary.DoesNotExist:
+        return Response(
+            {"error": f"{target_date.isoformat()}에 저장된 일기가 없습니다."},
+            status=404,
+        )
+
+    probs = diary.emotion or []
+    if len(probs) != len(EMOTION_LABELS):
+        return Response({"error": "emotion 데이터 형식 오류"}, status=500)
+    
+    max_idx = max(range(len(probs)), key=lambda i: probs[i])
+    label = EMOTION_LABELS[max_idx]
+
+    return Response(
+        {
+            "date": target_date.isoformat(),
+            "emotion": label,
+            "emotion_rate": diary.emotion,
+            "summary": diary.summary,
+        },
+        status=200,
+    )
