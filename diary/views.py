@@ -6,7 +6,6 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from .models import Diary
-from people.models import People
 from .utils import full_multimodal_analysis
 
 
