@@ -377,7 +377,7 @@ class LogoutView(APIView):
 
 
 
-EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포", "중립"]
+EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포"]
 
 #보호자 페이지_공개범위 0
 '''
@@ -615,8 +615,7 @@ def emotions_day_for_protector(request):
         )
 
     probs = diary.emotion or []
-    if len(probs) != len(EMOTION_LABELS):
-        return Response({"error": "emotion 데이터 형식 오류"}, status=500)
+   
     
     max_idx = max(range(len(probs)), key=lambda i: probs[i])
     label = EMOTION_LABELS[max_idx]
