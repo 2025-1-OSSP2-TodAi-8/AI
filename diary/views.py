@@ -7,6 +7,7 @@ from rest_framework import status
 
 from .models import Diary
 from people.models import People
+from .utils import full_multimodal_analysis
 
 
 @api_view(["POST"])
@@ -41,6 +42,17 @@ def record(request):
         diary = Diary.objects.create(
             user=user, date=date, audio=audio, emotion=[0, 0, 0, 0, 0, 0, 0]
         )
+
+    try:
+        text, summary, emotion_prob = full_multimodal_analysis(diary.audio.path)
+    except Exception:
+        return Response(
+            {"success": 0, "emotion": diary.emotion, "text": "파이프라인 에러"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    diary.summary = summary
+    diary.emotion = emotion_prob
+    diary.save()
 
     return Response(
         {"success": 1, "emotion": diary.emotion, "text": diary.summary or ""},
