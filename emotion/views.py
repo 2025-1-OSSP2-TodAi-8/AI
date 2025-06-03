@@ -57,6 +57,7 @@ def emotions_day(request):
             "date": target_date.isoformat(),
             "emotion": label,
             "emotion_rate": diary.emotion,
+            "summary": diary.summary,
         },
         status=200,
     )
