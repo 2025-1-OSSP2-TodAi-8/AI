@@ -1,7 +1,3 @@
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods  ##
-from django.views.decorators.http import require_POST  ##
-
 from people.models import People, Sharing
 from diary.models import Diary
 from emotion.models import Emotion
@@ -14,6 +10,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
 
 #회원가입
 class PeopleSignupView(APIView):
@@ -28,6 +27,13 @@ class PeopleSignupView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 
+#로그인
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+
 # 마이페이지 기본화면
 """
 요청 데이터포맷: 
@@ -40,7 +46,7 @@ def getPeopleInfo(request):
 
     person = request.user  
 
-    #연동이 된 보호자 계정들 조회회
+    #연동이 된 보호자 계정들 조회
     sharings = Sharing.objects.filter(owner=person, share_state="matched")
     if sharings.exists():
         serializer = SharingSerializer(sharings, many=True) #many=true로 해놓으면 반복문 효과
