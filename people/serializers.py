@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import People, Sharing
 #from django.contrib.auth.password_validation import validate_password #너무 짧은 비번인지 검증해주는 거라고 함. 이건 프론트에서 처리하고, 여기선 없어도 될듯듯
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 #회원가입
 class PeopleSignupSerializer(serializers.ModelSerializer):
@@ -51,3 +52,16 @@ class RequestedSharingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Sharing
         fields = ['sharing_id', 'protector_name', '공개범위']
+
+
+#로그인
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        user = self.user
+
+        data.update({
+            "user_type": user.user_type
+        })
+
+        return data
