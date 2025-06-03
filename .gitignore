@@ -39,3 +39,8 @@ htmlcov/
 node_modules/
 dist/
 build/
+
+diary/saved_model2/
+diary/whisper-base/
+diary/ke/
+diary/ks/
