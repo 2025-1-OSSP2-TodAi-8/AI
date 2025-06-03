@@ -388,7 +388,7 @@ EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포", "�
 '''
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def emotions_month_protector(request):
+def emotions_month_for_protector(request):
     protector = request.user  # 보호자(로그인한 사용자)
 
     year = request.data.get("year")
@@ -451,7 +451,7 @@ def emotions_month_protector(request):
 #보호자 페이지_공개범위 1_ 즐겨찾기
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def get_marked_month_for_caregiver(request):
+def get_marked_month_for_protector(request):
     protector = request.user
     user_id = request.data.get("user_id")
     year = request.data.get("year")
