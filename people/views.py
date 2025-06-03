@@ -320,8 +320,7 @@ def search_user_by_id(request):
 """
 요청 데이터포맷: 
 { 
-    "target_user_id": "some_user_id",
-    "relation": "son" 
+    "target_user_id": "hongildong",
 }
 """
 @api_view(['POST'])
@@ -331,11 +330,10 @@ def handle_sharing_request(request):
     requester = request.user  # 보호자 계정으로 로그인한 사용자
 
     target_user_id = data.get("target_user_id")  # 공유 요청 대상 유저
-    relation = data.get("relation")
-
-    if not target_user_id or not relation:
+    
+    if not target_user_id:
         return Response(
-            {"message": "target_user_id 또는 relation이 누락되었습니다."},
+            {"message": "target_user_id가 누락되었습니다."},
             status=status.HTTP_400_BAD_REQUEST
         )
     
@@ -349,17 +347,23 @@ def handle_sharing_request(request):
         )
     
     # 이미 연동 요청 보낸 적 있는지 확인
-    if Sharing.objects.filter(owner=target, shared_with=requester).exists():
+    if Sharing.objects.filter(owner=target, shared_with=requester, share_state="unmatched").exists():
         return Response(
-            {"message": "이미 연동 요청을 보냈습니다."},
+            {
+                "message": "이미 연동 요청을 보냈습니다.",
+                "target_user_id": target.id
+            },
             status=status.HTTP_400_BAD_REQUEST
         )
 
     # 공유 요청 생성(Sharing 테이블에 튜플 추가 / share_state = unmatched 상태로 저장)
-    Sharing.objects.create(owner=target, shared_with=requester, relation=relation)
+    Sharing.objects.create(owner=target, shared_with=requester)
     
     return Response(
-        {"message": "연동 요청을 보냈습니다."},
+        {
+            "message": "연동 요청을 보냈습니다.",
+            "target_user_id": target.id
+        },
         status=status.HTTP_201_CREATED
     )
 
