@@ -31,7 +31,6 @@ class People(AbstractUser):
 
 class Sharing(models.Model):
     RANGE_CHOICES = [
-        ("private", "비공개"),
         ("partial", "부분 공개"),
         ("full", "전체 공개"),
     ]
@@ -54,7 +53,7 @@ class Sharing(models.Model):
     )
     #공개범위 (default = 비공개)
     share_range = models.CharField(
-        max_length=10, choices=RANGE_CHOICES, default="private"
+        max_length=10, choices=RANGE_CHOICES, default="partial"
     )  
     #연동 상태 (default: unmatched /matched: 연결중/ rejected: 요청 거절됨)
     share_state = models.CharField(
