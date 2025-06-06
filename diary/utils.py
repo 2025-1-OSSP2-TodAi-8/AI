@@ -14,6 +14,7 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     Wav2Vec2Processor,
     Wav2Vec2ForSequenceClassification,
+    BertTokenizer,
 )
 
 # 장치 설정
@@ -28,8 +29,8 @@ whisper_model = WhisperForConditionalGeneration.from_pretrained(
 whisper_model.eval()
 
 # KoBERT 감정 분류 모델 로드
-KOBERT_EMOTION_DIR = os.path.join(os.path.dirname(__file__), "ke")
-emotion_tokenizer = AutoTokenizer.from_pretrained(
+KOBERT_EMOTION_DIR = os.path.join(os.path.dirname(__file__), "ke2")
+emotion_tokenizer = BertTokenizer.from_pretrained(
     KOBERT_EMOTION_DIR, local_files_only=True
 )
 emotion_model = AutoModelForSequenceClassification.from_pretrained(
@@ -37,14 +38,14 @@ emotion_model = AutoModelForSequenceClassification.from_pretrained(
 ).to(device)
 emotion_model.eval()
 
-original_labels = ["기쁨", "불안", "당황", "분노", "슬픔", "상처"]
+emotion_labels = ["기쁨", "슬픔", "분노", "놀람", "공포", "혐오"]
 mapped_labels = {
     "기쁨": "기쁨",
     "슬픔": "슬픔",
     "분노": "분노",
-    "당황": "놀람",
-    "불안": "공포",
-    "상처": "혐오",
+    "놀람": "놀람",
+    "공포": "공포",
+    "혐오": "혐오",
 }
 
 wav2vec2_labels = ["Angry", "Sadness", "Disgust", "Happiness", "Fear", "Surprise"]
@@ -99,7 +100,7 @@ def full_multimodal_analysis(audio_path: str):
     emo_probs_arr = torch.softmax(emo_logits, dim=-1).squeeze().cpu().numpy()
 
     original_probs = {
-        original_labels[i]: float(emo_probs_arr[i]) for i in range(len(original_labels))
+        emotion_labels[i]: float(emo_probs_arr[i]) for i in range(len(emotion_labels))
     }
     emotion_probs = {mapped_labels[k]: v for k, v in original_probs.items()}
 
@@ -135,4 +136,4 @@ def full_multimodal_analysis(audio_path: str):
 
     emotion_prob2 = [float(w2v_probs_arr[i]) for i in range(len(wav2vec2_labels))]
 
-    return text, summary, emotion_prob2
+    return text, summary, emotion_probs, emotion_prob2

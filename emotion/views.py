@@ -10,7 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
 
-EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포", "중립"]
+EMOTION_LABELS = ["화남", "슬픔", "혐오", "행복", "공포", "놀람"]
 
 
 @api_view(["POST"])
@@ -84,7 +84,6 @@ def emotions_month(request):
         return Response(
             {"error": "year, month는 정수이며 month는 1~12여야 합니다."}, status=400
         )
-
     diaries = Diary.objects.filter(
         user=user, date__year=year, date__month=month
     ).order_by("date")
@@ -111,7 +110,7 @@ def emotions_year(request):
     year = request.data.get("year")
 
     if year is None:
-        return Response({"error": "year, month 모두 필요합니다."}, status=400)
+        return Response({"error": "year가 필요합니다."}, status=400)
 
     try:
         year = int(year)
