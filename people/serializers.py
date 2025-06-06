@@ -33,7 +33,7 @@ class PeopleSignupSerializer(serializers.ModelSerializer):
         )
         return user
 
-#마이페이지에서, 연동관계 있을 시 연동관계들 json 형식으로로
+#마이페이지에서, 연동관계 있을 시 연동관계들 json 형식으로
 class SharingSerializer(serializers.ModelSerializer):
     protector_id = serializers.IntegerField(source='shared_with.id')
     protector_name = serializers.CharField(source='shared_with.name')

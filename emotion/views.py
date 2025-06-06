@@ -47,8 +47,7 @@ def emotions_day(request):
         )
 
     probs = diary.emotion or []
-    if len(probs) != len(EMOTION_LABELS):
-        return Response({"error": "emotion 데이터 형식 오류"}, status=500)
+    
     max_idx = max(range(len(probs)), key=lambda i: probs[i])
     label = EMOTION_LABELS[max_idx]
 
