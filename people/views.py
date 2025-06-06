@@ -34,11 +34,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 
 # 마이페이지 기본화면
-"""
-요청 데이터포맷: 
-- header에 액세스 토큰 정보
-- json body에는 따로 포함할 데이터 없음.
-"""
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])  # 인증된 사용자만 접근 가능(토큰 기반 인증 거침)
 def getPeopleInfo(request):
@@ -70,12 +65,6 @@ def getPeopleInfo(request):
 
 
 # 이메일 수정
-"""
-요청 데이터포맷: 
-{ 
-    "new_email":"address@naver.com"
-}
-"""
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_email(request):
@@ -96,13 +85,6 @@ def update_email(request):
 
 
 #비밀번호 수정
-'''
-요청 데이터포맷: 
-{
-    "current_password": "old_password123",
-    "new_password": "new_password456"
-} 
-'''
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_password(request):
@@ -127,13 +109,6 @@ def update_password(request):
 
 
 # 공개범위 수정
-"""
-요청 데이터포맷:
-{
-  "protector_id": 2,
-  "공개범위": "partial"
-}
-"""
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_showrange(request):
@@ -186,10 +161,6 @@ def update_showrange(request):
 
 
 # 아이디 검색
-"""
-요청 포맷: { "search_id": "ididid" }
-응답 포맷: { "exists": true, "name": "사용자 이름", }
-"""
 @api_view(['POST'])
 @permission_classes([IsAuthenticated]) 
 def search_user_by_id(request):
@@ -214,12 +185,6 @@ def search_user_by_id(request):
 
 
 # 연동 요청 처리
-"""
-요청 데이터포맷: 
-{ 
-    "target_user_id": "hongildong",
-}
-"""
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def handle_sharing_request(request):
@@ -274,16 +239,6 @@ def handle_sharing_request(request):
     )
 
 # 연동 요청 수락 처리
-"""
-요청 JSON 예시: 
-{ 
-"sharing_id": 10 
-"action": accept OR reject
-}  #sharing 테이블의 primary키
-
-마이페이지 API에, sharing 테이블의 튜플 중 현재 로그인한 사용자의 아이디이고, unmatched인 경우 notification 정보 같이 주는 코드 추가해야함. 
-unmatched이면, 메인화면 뷰에서 응답 json에 notification 정보 추가해야함
-"""
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def accept_sharing_request(request):
@@ -314,13 +269,20 @@ def accept_sharing_request(request):
         return Response({"message": f"연동 요청이 {action}되었습니다."})
     
     except Sharing.DoesNotExist:
-        return Response({"message": "해당 연동 요청이 존재하지 않습니다."}, status=status.HTTP_404_NOT_FOUND)
+        exist=Sharing.objects.filter(id=sharing_id, owner=request.user).first()
+        if exist:
+            return Response(
+                {"message": f"해당 연동 요청은 이미'{exist.share_state}' 상태입니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        else:   
+            return Response(
+                {"message": "해당 연동 요청이 존재하지 않습니다."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
-# disconnect_sharing(request)함수
-"""
-연결끊기 요청의 데이터포맷: {"shared_with":"연결 보호자 기본키(마이페이지의 연동 정보 표시할 때 데이터 포함되어 있음)"}
-"""
+#연동 해제 함수
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def disconnect_sharing(request):
@@ -349,12 +311,6 @@ def disconnect_sharing(request):
 
 
 #로그아웃
-'''
-요청 데이터포맷:
-{
-    "refresh": "리프레시토큰문자열"
-}
-'''
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
     def post(self, request):
@@ -379,15 +335,7 @@ class LogoutView(APIView):
 
 EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포"]
 
-#보호자 페이지_공개범위 0
-'''
-요청 데이터포맷:
-{
-    "user_id" : 1,
-	"year" : 2024, 
-	"month" : 5 
-}
-'''
+#보호자 페이지_공개범위 partial, full 공통
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def emotions_month_for_protector(request):
@@ -448,7 +396,7 @@ def emotions_month_for_protector(request):
 
 
 
-#보호자 페이지_공개범위 1_ 즐겨찾기_연간
+#보호자 페이지_공개범위 partial, full 공통_ 즐겨찾기_연간
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def get_marked_year_for_protector(request):
