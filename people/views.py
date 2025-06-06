@@ -134,7 +134,7 @@ def update_showrange(request):
         )
 
     
-    VALID_RANGE = ["private", "partial", "full"]
+    VALID_RANGE = ["partial", "full"]
     if new_range not in VALID_RANGE:
         return Response(
             {"message": f"공개범위 값은 {VALID_RANGE} 중 하나여야 합니다."},
