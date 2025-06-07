@@ -5,63 +5,81 @@ import torch
 import numpy as np
 import soundfile as sf
 import librosa
+import openai
 
 from transformers import (
     WhisperProcessor,
     WhisperForConditionalGeneration,
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    AutoModelForSeq2SeqLM,
     Wav2Vec2Processor,
     Wav2Vec2ForSequenceClassification,
+    BertConfig,
     BertTokenizer,
+    BertForSequenceClassification,
 )
+
+
+emotion_labels = [
+    "Fear",
+    "Surprise",
+    "Angry",
+    "Sadness",
+    "Normal",
+    "Happiness",
+    "Aversion",
+]
+wav2vec2_labels = ["Angry", "Sadness", "Disgust", "Happiness", "Fear", "Surprise"]
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+
+def summarize(text: str) -> str:
+    prompt = (
+        """한 사람이 작성한 일기를 제공할꺼야, 다음 형식을 맞춰서 요약해,
+            오늘은 (인간의 6가지 감정 분노,슬픔,혐오,행복,두려움,놀람 중 1개를 예측)을 느낀 하루 이셨군요
+            (텍스트에서 찾은 원인)하셔서
+            (1줄에서 판단한 감정)하게 느꼈던 날이었군요 ~하셨을 것 같아요.
+            어떤 감정을 느끼는지에 중점을 두어 공감식으로 요약해:\n\n"""
+        f"{text}\n\n"
+        "요약:"
+    )
+    resp = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=150,
+        n=1,
+    )
+    return resp.choices[0].message.content.strip()
+
 
 # 장치 설정
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Whisper 모델 로드
-WHISPER_DIR = os.path.join(os.path.dirname(__file__), "whisper-base")
-processor = WhisperProcessor.from_pretrained(WHISPER_DIR, local_files_only=True)
-whisper_model = WhisperForConditionalGeneration.from_pretrained(
-    WHISPER_DIR, local_files_only=True
-).to(device)
+model_id = "openai/whisper-base"
+processor = WhisperProcessor.from_pretrained(model_id)
+
+whisper_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(device)
+
 whisper_model.eval()
+# 2) emotion-text 디렉터리
+EMO_DIR = os.path.join(os.path.dirname(__file__), "emotion-text")
 
-# KoBERT 감정 분류 모델 로드
-KOBERT_EMOTION_DIR = os.path.join(os.path.dirname(__file__), "ke2")
-emotion_tokenizer = BertTokenizer.from_pretrained(
-    KOBERT_EMOTION_DIR, local_files_only=True
+# 3) 토크나이저: vocab.txt 한 파일만으로 로드
+tokenizer = BertTokenizer.from_pretrained(
+    os.path.join(EMO_DIR, "vocab.txt"), local_files_only=True
 )
-emotion_model = AutoModelForSequenceClassification.from_pretrained(
-    KOBERT_EMOTION_DIR, local_files_only=True
-).to(device)
-emotion_model.eval()
 
-emotion_labels = ["기쁨", "슬픔", "분노", "놀람", "공포", "혐오"]
-mapped_labels = {
-    "기쁨": "기쁨",
-    "슬픔": "슬픔",
-    "분노": "분노",
-    "놀람": "놀람",
-    "공포": "공포",
-    "혐오": "혐오",
-}
+config = BertConfig.from_json_file(os.path.join(EMO_DIR, "config.json"))
+config.num_labels = 7
+model = BertForSequenceClassification(config)
+state_dict = torch.load(os.path.join(EMO_DIR, "model.pt"), map_location=device)
+model.load_state_dict(state_dict)
 
-wav2vec2_labels = ["Angry", "Sadness", "Disgust", "Happiness", "Fear", "Surprise"]
-
-# KoBART 요약 모델 로드
-KOBART_SUMMARY_DIR = os.path.join(os.path.dirname(__file__), "ks")
-summary_tokenizer = AutoTokenizer.from_pretrained(
-    KOBART_SUMMARY_DIR, local_files_only=True
-)
-summary_model = AutoModelForSeq2SeqLM.from_pretrained(
-    KOBART_SUMMARY_DIR, local_files_only=True
-).to(device)
-summary_model.eval()
+model.eval()
 
 # Wav2Vec2 기반 음성 감정 분류기 로드
-SAVED_W2VEMO_DIR = os.path.join(os.path.dirname(__file__), "saved_model2")
+SAVED_W2VEMO_DIR = os.path.join(os.path.dirname(__file__), "emotion-audio")
 wav2vec2_processor = Wav2Vec2Processor.from_pretrained(
     SAVED_W2VEMO_DIR, local_files_only=True
 )
@@ -91,36 +109,24 @@ def full_multimodal_analysis(audio_path: str):
     text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
     # KoBERT 텍스트 감정 분류
-    emo_inputs = emotion_tokenizer(
-        text, return_tensors="pt", truncation=True, padding="max_length", max_length=512
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding="max_length",
+        max_length=512,
     ).to(device)
 
     with torch.no_grad():
-        emo_logits = emotion_model(**emo_inputs).logits
-    emo_probs_arr = torch.softmax(emo_logits, dim=-1).squeeze().cpu().numpy()
+        logits = model(**inputs).logits
 
-    original_probs = {
-        emotion_labels[i]: float(emo_probs_arr[i]) for i in range(len(emotion_labels))
+    probs = torch.softmax(logits, dim=-1).squeeze().cpu().numpy()
+    emotion_text = {
+        emotion_labels[i]: float(probs[i]) for i in range(len(emotion_labels))
     }
-    emotion_probs = {mapped_labels[k]: v for k, v in original_probs.items()}
 
-    # KoBART 텍스트 요약
-    sum_inputs = summary_tokenizer(
-        text, return_tensors="pt", truncation=True, padding="longest", max_length=512
-    )
-    if "token_type_ids" in sum_inputs:
-        sum_inputs.pop("token_type_ids")
-    sum_inputs = {k: v.to(device) for k, v in sum_inputs.items()}
-
-    with torch.no_grad():
-        summary_ids = summary_model.generate(
-            **sum_inputs,
-            max_length=100,
-            min_length=20,
-            num_beams=4,
-            early_stopping=True,
-        )
-    summary = summary_tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    # api 텍스트 요약
+    summary = summarize(text)
 
     # Wav2Vec2 기반 음성 감정 분류
     w2v_inputs = wav2vec2_processor(
@@ -134,6 +140,6 @@ def full_multimodal_analysis(audio_path: str):
         w2v_outputs = wav2vec2_emotion_model(**w2v_inputs)
         w2v_probs_arr = w2v_outputs.logits.squeeze().cpu().numpy()
 
-    emotion_prob2 = [float(w2v_probs_arr[i]) for i in range(len(wav2vec2_labels))]
+    emotion_audio = [float(w2v_probs_arr[i]) for i in range(len(wav2vec2_labels))]
 
-    return text, summary, emotion_probs, emotion_prob2
+    return text, summary, emotion_text, emotion_audio
