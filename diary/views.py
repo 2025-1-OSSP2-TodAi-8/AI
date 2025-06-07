@@ -44,30 +44,31 @@ def record(request):
         )
 
     # try:
-    #     text, summary, emotion_prob1, emotion_prob2 = full_multimodal_analysis(
+    #     text, summary, emotion_text, emotion_audio = full_multimodal_analysis(
     #         diary.audio.path
     #     )
     # except Exception:
     #     return Response(
-    #         {"success": 0, "emotion": diary.emotion, "text": "파이프라인 에러"},
+    #         {"success": 0, "text": "파이프라인 에러"},
     #         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
     #     )
     # diary.summary = summary
-    # diary.emotion = emotion_prob2
+    # diary.emotion = emotion_audio
     # diary.save()
 
     # return Response(
     #     {
     #         "success": 1,
-    #         "koBERT": emotion_prob1,
+    #         "koBERT": emotion_text,
+    #         "text": text,
     #         "wav2vec2 감정 순서": wav2vec2_labels,
-    #         "wav2vec2": emotion_prob2,
-    #         "text": diary.summary or "",
+    #         "wav2vec2": emotion_audio,
+    #         "summary": diary.summary or "",
     #     },
     #     status=status.HTTP_200_OK,
     # )
     return Response(
-        {"success": 1, "emotion": "모델 업로드 이전"},
+        {"status": 1},
         status=status.HTTP_200_OK,
     )
 
@@ -110,7 +111,7 @@ def marking(request):
     )
 
 
-EMOTION_LABELS = ["행복", "슬픔", "놀람", "화남", "혐오", "공포", "중립"]
+EMOTION_LABELS = ["화남", "슬픔", "혐오", "행복", "공포", "놀람"]
 
 
 @api_view(["POST"])
