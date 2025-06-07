@@ -6,7 +6,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from .views import CustomTokenObtainPairView
 
 urlpatterns=[
-    path('',views.getPeopleInfo), #마이페이지지
+    path('',views.getPeopleInfo), #마이페이지
     path('update/email', views.update_email),
     path('delete/connection',views.disconnect_sharing),
     path('update/showrange', views.update_showrange), #공개 범위 변경
