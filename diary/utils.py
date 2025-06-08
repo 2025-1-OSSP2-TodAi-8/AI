@@ -2,6 +2,7 @@
 
 import os
 import torch
+import torch.nn as nn
 import numpy as np
 import soundfile as sf
 import librosa
@@ -12,13 +13,14 @@ from transformers import (
     WhisperForConditionalGeneration,
     Wav2Vec2Processor,
     Wav2Vec2ForSequenceClassification,
-    BertConfig,
-    BertTokenizer,
-    BertForSequenceClassification,
+    BertModel,
 )
 
+from kobert_transformers import get_tokenizer
 
-emotion_labels = [
+wav2vec2_labels = ["Angry", "Sadness", "Disgust", "Happiness", "Fear", "Surprise"]
+
+kobert_labels = [
     "Fear",
     "Surprise",
     "Angry",
@@ -27,7 +29,35 @@ emotion_labels = [
     "Happiness",
     "Aversion",
 ]
-wav2vec2_labels = ["Angry", "Sadness", "Disgust", "Happiness", "Fear", "Surprise"]
+
+
+MIX_MATRIX = [
+    # "기쁨", "슬픔", "분노", "놀람", "공포", "혐오"
+    [4, 2, 0, 3, 0, 0],  # 기쁨
+    [2, 4, 3, 3, 4, 2],  # 슬픔
+    [0, 3, 3, 2, 4, 4],  # 분노
+    [3, 3, 2, 3, 4, 2],  # 놀람
+    [0, 4, 4, 4, 4, 3],  # 공포
+    [0, 2, 4, 2, 3, 4],  # 혐오
+]
+
+EMOTION_KR_TO_EN = {
+    "기쁨": "Happiness",
+    "슬픔": "Sadness",
+    "분노": "Angry",
+    "놀람": "Surprise",
+    "공포": "Fear",
+    "혐오": "Disgust",
+}
+
+EMOTION_EN_TO_INDEX = {
+    "Happiness": 0,
+    "Sadness": 1,
+    "Angry": 2,
+    "Surprise": 3,
+    "Fear": 4,
+    "Disgust": 5,
+}
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -62,21 +92,49 @@ processor = WhisperProcessor.from_pretrained(model_id)
 whisper_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(device)
 
 whisper_model.eval()
-# 2) emotion-text 디렉터리
-EMO_DIR = os.path.join(os.path.dirname(__file__), "emotion-text")
 
-# 3) 토크나이저: vocab.txt 한 파일만으로 로드
-tokenizer = BertTokenizer.from_pretrained(
-    os.path.join(EMO_DIR, "vocab.txt"), local_files_only=True
-)
 
-config = BertConfig.from_json_file(os.path.join(EMO_DIR, "config.json"))
-config.num_labels = 7
-model = BertForSequenceClassification(config)
-state_dict = torch.load(os.path.join(EMO_DIR, "model.pt"), map_location=device)
-model.load_state_dict(state_dict)
+class KoBERTClassifier(nn.Module):
+    def __init__(self, bert, hidden_size=768, num_classes=6, dr_rate=None):
+        super(KoBERTClassifier, self).__init__()
+        self.bert = bert
+        self.dr_rate = dr_rate
+        self.classifier = nn.Linear(hidden_size, num_classes)
+        if dr_rate:
+            self.dropout = nn.Dropout(p=dr_rate)
 
+    def forward(self, input_ids, attention_mask, token_type_ids):
+        pooled_output = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+        )[1]
+        if self.dr_rate:
+            pooled_output = self.dropout(pooled_output)
+        return self.classifier(pooled_output)
+
+
+tokenizer = get_tokenizer()
+bert_model = BertModel.from_pretrained("skt/kobert-base-v1")
+
+model = KoBERTClassifier(bert_model, dr_rate=0.5, num_classes=7)
+model.load_state_dict(
+    torch.load(
+        "/Users/jaehyuk/Desktop/projects/TodAi/diary/model.pt", map_location="cpu"
+    )
+)  # 또는 "cuda"
 model.eval()
+
+
+def predict_emotion_from_text(text: str) -> str:
+    inputs = tokenizer(
+        text, return_tensors="pt", truncation=True, padding=True, max_length=128
+    )
+    with torch.no_grad():
+        outputs = model(**inputs)
+        probs = torch.softmax(outputs, dim=1).squeeze()
+        return probs.tolist()
+
 
 # Wav2Vec2 기반 음성 감정 분류기 로드
 SAVED_W2VEMO_DIR = os.path.join(os.path.dirname(__file__), "emotion-audio")
@@ -84,9 +142,42 @@ wav2vec2_processor = Wav2Vec2Processor.from_pretrained(
     SAVED_W2VEMO_DIR, local_files_only=True
 )
 wav2vec2_emotion_model = Wav2Vec2ForSequenceClassification.from_pretrained(
-    SAVED_W2VEMO_DIR, local_files_only=True
+    SAVED_W2VEMO_DIR,
+    local_files_only=True,
+    num_labels=6,
+    problem_type="multi_label_classification",
 ).to(device)
 wav2vec2_emotion_model.eval()
+
+
+def compute_final_emotion(wav2vec2_probs, kobert_probs, kobert_labels):
+    # 음성 기반에서 가장 강한 감정 선택
+    wav_top_index = int(torch.tensor(wav2vec2_probs).argmax())
+    wav_top_emotion = wav2vec2_labels[wav_top_index]
+
+    if wav_top_emotion not in EMOTION_EN_TO_INDEX:
+        return "Unknown"
+
+    wav_idx = EMOTION_EN_TO_INDEX[wav_top_emotion]
+
+    final_scores = []
+    for i, label in enumerate(kobert_labels):
+        if label == "Normal":  # 제외
+            final_scores.append(0.0)
+            continue
+        if label == "Aversion":
+            label = "Disgust"  # 혼합 허용도 매핑 위해 이름 통일
+
+        if label not in EMOTION_EN_TO_INDEX:
+            final_scores.append(0.0)
+            continue
+
+        ko_idx = EMOTION_EN_TO_INDEX[label]
+        compatibility = MIX_MATRIX[ko_idx][wav_idx]
+        weighted_score = kobert_probs[i] * compatibility
+        final_scores.append(weighted_score)
+
+    return torch.tensor(final_scores).tolist()
 
 
 def full_multimodal_analysis(audio_path: str):
@@ -108,22 +199,7 @@ def full_multimodal_analysis(audio_path: str):
         )
     text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-    # KoBERT 텍스트 감정 분류
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        padding="max_length",
-        max_length=512,
-    ).to(device)
-
-    with torch.no_grad():
-        logits = model(**inputs).logits
-
-    probs = torch.softmax(logits, dim=-1).squeeze().cpu().numpy()
-    emotion_text = {
-        emotion_labels[i]: float(probs[i]) for i in range(len(emotion_labels))
-    }
+    emotion_text = predict_emotion_from_text(text)
 
     # api 텍스트 요약
     summary = summarize(text)
@@ -142,4 +218,7 @@ def full_multimodal_analysis(audio_path: str):
 
     emotion_audio = [float(w2v_probs_arr[i]) for i in range(len(wav2vec2_labels))]
 
-    return text, summary, emotion_text, emotion_audio
+    final_emotion = compute_final_emotion(emotion_audio, emotion_text, kobert_labels)
+    final_emotion.pop()
+
+    return text, summary, emotion_text, emotion_audio, final_emotion
