@@ -7,7 +7,7 @@ from rest_framework import status
 
 from .models import Diary
 
-# from .utils import full_multimodal_analysis, wav2vec2_labels
+from .utils import full_multimodal_analysis, wav2vec2_labels, kobert_labels
 
 
 @api_view(["POST"])
@@ -43,32 +43,30 @@ def record(request):
             user=user, date=date, audio=audio, emotion=[0, 0, 0, 0, 0, 0, 0]
         )
 
-    # try:
-    #     text, summary, emotion_text, emotion_audio = full_multimodal_analysis(
-    #         diary.audio.path
-    #     )
-    # except Exception:
-    #     return Response(
-    #         {"success": 0, "text": "파이프라인 에러"},
-    #         status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-    #     )
-    # diary.summary = summary
-    # diary.emotion = emotion_audio
-    # diary.save()
+    try:
+        text, summary, emotion_text, emotion_audio, final_emotion = (
+            full_multimodal_analysis(diary.audio.path)
+        )
+    except Exception:
+        return Response(
+            {"success": 0, "text": "파이프라인 에러"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    diary.summary = summary
+    diary.emotion = emotion_audio
+    diary.save()
 
-    # return Response(
-    #     {
-    #         "success": 1,
-    #         "koBERT": emotion_text,
-    #         "text": text,
-    #         "wav2vec2 감정 순서": wav2vec2_labels,
-    #         "wav2vec2": emotion_audio,
-    #         "summary": diary.summary or "",
-    #     },
-    #     status=status.HTTP_200_OK,
-    # )
     return Response(
-        {"status": 1},
+        {
+            "success": 1,
+            "koBERT 감정 순서": kobert_labels,
+            "koBERT": emotion_text,
+            "text": text,
+            "wav2vec2 감정 순서": wav2vec2_labels,
+            "wav2vec2": emotion_audio,
+            "final_emotion": final_emotion,
+            "summary": diary.summary or "",
+        },
         status=status.HTTP_200_OK,
     )
 
