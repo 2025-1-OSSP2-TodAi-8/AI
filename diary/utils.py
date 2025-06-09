@@ -193,4 +193,5 @@ def full_multimodal_analysis(audio_path: str):
 
     final_emotion = compute_final_emotion(emotion_audio, emotion_text, kobert_labels)
 
+    print(text)
     return summary, final_emotion
