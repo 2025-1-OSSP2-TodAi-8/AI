@@ -5,9 +5,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
+from django.core.files import File
+from django.core.files.temp import NamedTemporaryFile
+from moviepy.editor import AudioFileClip
+
+import uuid
+import tempfile
+import os
+
+
 from .models import Diary
 
-from .utils import full_multimodal_analysis, wav2vec2_labels, kobert_labels
+from .utils import full_multimodal_analysis
 
 
 @api_view(["POST"])
@@ -35,36 +44,60 @@ def record(request):
     diary = Diary.objects.filter(user=user, date=date).first()
 
     if diary:
-        diary.audio = audio
+        if diary.audio:
+            diary.audio.delete(save=False)
         diary.date = date
-        diary.save(update_fields=["audio", "date"])
     else:
-        diary = Diary.objects.create(
-            user=user, date=date, audio=audio, emotion=[0, 0, 0, 0, 0, 0, 0]
-        )
+        diary = Diary.objects.create(user=user, date=date, emotion=[0] * 6)
+
+    ext = os.path.splitext(audio.name)[1].lower()
+    if ext == ".mp4":
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp_input:
+            for chunk in audio.chunks():
+                tmp_input.write(chunk)
+            tmp_input_path = tmp_input.name
+
+        try:
+            audioclip = AudioFileClip(tmp_input_path)
+            tmp_wav = NamedTemporaryFile(suffix=".wav", delete=False)
+            audioclip.write_audiofile(
+                tmp_wav.name, fps=16000, verbose=False, logger=None
+            )
+            audioclip.close()
+
+            wav_file_name = f"{uuid.uuid4()}.wav"
+            with open(tmp_wav.name, "rb") as f:
+                diary.audio.save(wav_file_name, File(f), save=True)
+
+            audio_path = diary.audio.path
+        except Exception as e:
+            return Response(
+                {"success": 0, "text": f"mp4 처리 오류: {str(e)}"}, status=500
+            )
+        finally:
+            os.remove(tmp_input_path)
+            os.remove(tmp_wav.name)
+
+    else:
+        diary.audio = audio
+        diary.save(update_fields=["audio"])
+        audio_path = diary.audio.path
 
     try:
-        text, summary, emotion_text, emotion_audio, final_emotion = (
-            full_multimodal_analysis(diary.audio.path)
-        )
-    except Exception:
+        summary, emotion = full_multimodal_analysis(audio_path)
+    except:
         return Response(
             {"success": 0, "text": "파이프라인 에러"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     diary.summary = summary
-    diary.emotion = emotion_audio
+    diary.emotion = emotion
     diary.save()
 
     return Response(
         {
             "success": 1,
-            "koBERT 감정 순서": kobert_labels,
-            "koBERT": emotion_text,
-            "text": text,
-            "wav2vec2 감정 순서": wav2vec2_labels,
-            "wav2vec2": emotion_audio,
-            "final_emotion": final_emotion,
+            "emotion": emotion,
             "summary": diary.summary or "",
         },
         status=status.HTTP_200_OK,

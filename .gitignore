@@ -41,6 +41,6 @@ dist/
 build/
 
 emotion-audio/
-model.pt
+emotion-text/
 
 test/
