@@ -8,10 +8,10 @@ class Diary(models.Model):
     date = models.DateField(null=True)
     emotion = ArrayField(
         base_field=models.FloatField(),
-        size=7,
+        size=6,
         default=list,
         verbose_name="감정 비율",
-        help_text="[행복, 슬픔, 놀람, 화남, 혐오, 공포, 중립] 순서로 0~1 사이의 확률 리스트",
+        help_text="[기쁨, 슬픔, 분노, 놀람, 공포, 혐오] 순서로 0~1 사이의 확률 리스트",
     )
     audio = models.FileField(upload_to="diary/audio/", null=True)
     summary = models.TextField(null=True)
