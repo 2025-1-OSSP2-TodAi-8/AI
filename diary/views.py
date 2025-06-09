@@ -1,10 +1,10 @@
-import datetime
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
+from django.http import FileResponse
 from django.core.files import File
 from django.core.files.temp import NamedTemporaryFile
 from moviepy.editor import AudioFileClip
@@ -12,6 +12,8 @@ from moviepy.editor import AudioFileClip
 import uuid
 import tempfile
 import os
+import mimetypes
+import datetime
 
 
 from .models import Diary
@@ -102,6 +104,51 @@ def record(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def get_record(request):
+    user = request.user
+    year = request.data.get("year")
+    month = request.data.get("month")
+    day = request.data.get("day")
+
+    # 1) 필수 파라미터 검사
+    if year is None or month is None or day is None:
+        return Response(
+            {"success": 0, "message": "year, month, day 모두 필수입니다."}, status=400
+        )
+    # 2) 정수 변환
+    try:
+        y, m, d = int(year), int(month), int(day)
+        target_date = datetime.date(y, m, d)
+    except (ValueError, TypeError):
+        return Response(
+            {"success": 0, "message": "year, month, day는 정수여야 합니다."}, status=400
+        )
+    # 3) 해당 날짜의 Diary 조회
+    diary = Diary.objects.filter(user=user, date=target_date).first()
+    if not diary or not diary.audio:
+        return Response(
+            {"success": 0, "message": f"{target_date}의 음성 파일이 없습니다."},
+            status=404,
+        )
+    # 4) 파일 열기
+    file_path = diary.audio.path
+    file_handle = open(file_path, "rb")
+
+    # 5) Content-Type 추출
+    content_type, _ = mimetypes.guess_type(file_path)
+    if content_type is None:
+        content_type = "application/octet-stream"
+
+    # 6) FileResponse 반환
+    response = FileResponse(file_handle, content_type=content_type)
+    response["Content-Disposition"] = (
+        f'attachment; filename="{os.path.basename(file_path)}"'
+    )
+    return response
 
 
 @api_view(["POST"])
