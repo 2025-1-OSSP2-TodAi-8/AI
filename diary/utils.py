@@ -13,32 +13,25 @@ from transformers import (
     WhisperForConditionalGeneration,
     Wav2Vec2Processor,
     Wav2Vec2ForSequenceClassification,
-    BertModel,
+    AutoTokenizer,
+    AutoModelForSequenceClassification,
 )
 
 from kobert_transformers import get_tokenizer
 
 wav2vec2_labels = ["Angry", "Sadness", "Disgust", "Happiness", "Fear", "Surprise"]
 
-kobert_labels = [
-    "Fear",
-    "Surprise",
-    "Angry",
-    "Sadness",
-    "Normal",
-    "Happiness",
-    "Aversion",
-]
+kobert_labels = ["Happiness", "Sadness", "Angry", "Surprise", "Fear", "Disgust"]
 
 
 MIX_MATRIX = [
     # "기쁨", "슬픔", "분노", "놀람", "공포", "혐오"
-    [4, 2, 0, 3, 0, 0],  # 기쁨
-    [2, 4, 3, 3, 4, 2],  # 슬픔
-    [0, 3, 3, 2, 4, 4],  # 분노
-    [3, 3, 2, 3, 4, 2],  # 놀람
-    [0, 4, 4, 4, 4, 3],  # 공포
-    [0, 2, 4, 2, 3, 4],  # 혐오
+    [0.444, 0.222, 0.0, 0.333, 0.0, 0.0],  # 기쁨
+    [0.111, 0.222, 0.167, 0.167, 0.222, 0.111],  # 슬픔
+    [0.0, 0.1875, 0.1875, 0.125, 0.25, 0.25],  # 분노
+    [0.176, 0.176, 0.118, 0.176, 0.235, 0.118],  # 놀람
+    [0.0, 0.210, 0.210, 0.210, 0.210, 0.158],  # 공포
+    [0.0, 0.118, 0.235, 0.118, 0.176, 0.235],  # 혐오
 ]
 
 EMOTION_KR_TO_EN = {
@@ -58,7 +51,6 @@ EMOTION_EN_TO_INDEX = {
     "Fear": 4,
     "Disgust": 5,
 }
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
@@ -94,46 +86,15 @@ whisper_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(dev
 whisper_model.eval()
 
 
-class KoBERTClassifier(nn.Module):
-    def __init__(self, bert, hidden_size=768, num_classes=6, dr_rate=None):
-        super(KoBERTClassifier, self).__init__()
-        self.bert = bert
-        self.dr_rate = dr_rate
-        self.classifier = nn.Linear(hidden_size, num_classes)
-        if dr_rate:
-            self.dropout = nn.Dropout(p=dr_rate)
+checkpoint_path = "/Users/jaehyuk/Desktop/projects/TodAi/diary/emotion-text"
 
-    def forward(self, input_ids, attention_mask, token_type_ids):
-        pooled_output = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-        )[1]
-        if self.dr_rate:
-            pooled_output = self.dropout(pooled_output)
-        return self.classifier(pooled_output)
-
-
-tokenizer = get_tokenizer()
-bert_model = BertModel.from_pretrained("skt/kobert-base-v1")
-
-model = KoBERTClassifier(bert_model, dr_rate=0.5, num_classes=7)
-model.load_state_dict(
-    torch.load(
-        "/Users/jaehyuk/Desktop/projects/TodAi/diary/model.pt", map_location="cpu"
-    )
-)  # 또는 "cuda"
-model.eval()
-
-
-def predict_emotion_from_text(text: str) -> str:
-    inputs = tokenizer(
-        text, return_tensors="pt", truncation=True, padding=True, max_length=128
-    )
-    with torch.no_grad():
-        outputs = model(**inputs)
-        probs = torch.softmax(outputs, dim=1).squeeze()
-        return probs.tolist()
+kmodel = AutoModelForSequenceClassification.from_pretrained(
+    checkpoint_path,
+    num_labels=6,
+    problem_type="multi_label_classification",
+    local_files_only=True,
+)
+tokenizer = AutoTokenizer.from_pretrained("monologg/kobert", trust_remote_code=True)
 
 
 # Wav2Vec2 기반 음성 감정 분류기 로드
@@ -174,7 +135,7 @@ def compute_final_emotion(wav2vec2_probs, kobert_probs, kobert_labels):
 
         ko_idx = EMOTION_EN_TO_INDEX[label]
         compatibility = MIX_MATRIX[ko_idx][wav_idx]
-        weighted_score = kobert_probs[i] * compatibility
+        weighted_score = (kobert_probs[i] + compatibility) / 2
         final_scores.append(weighted_score)
 
     return torch.tensor(final_scores).tolist()
@@ -199,8 +160,20 @@ def full_multimodal_analysis(audio_path: str):
         )
     text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-    emotion_text = predict_emotion_from_text(text)
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding="max_length",
+        max_length=128,
+    ).to(kmodel.device)
 
+    with torch.no_grad():
+        outputs = kmodel(**inputs)
+        logits = outputs.logits
+        probs = torch.sigmoid(logits).cpu().numpy()[0]
+
+    emotion_text = probs.tolist()
     # api 텍스트 요약
     summary = summarize(text)
 
@@ -219,6 +192,5 @@ def full_multimodal_analysis(audio_path: str):
     emotion_audio = [float(w2v_probs_arr[i]) for i in range(len(wav2vec2_labels))]
 
     final_emotion = compute_final_emotion(emotion_audio, emotion_text, kobert_labels)
-    final_emotion.pop()
 
-    return text, summary, emotion_text, emotion_audio, final_emotion
+    return summary, final_emotion
