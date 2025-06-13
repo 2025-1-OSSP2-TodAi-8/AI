@@ -51,6 +51,7 @@ EMOTION_EN_TO_INDEX = {
     "Fear": 4,
     "Disgust": 5,
 }
+
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
@@ -111,24 +112,14 @@ wav2vec2_emotion_model = Wav2Vec2ForSequenceClassification.from_pretrained(
 wav2vec2_emotion_model.eval()
 
 
-def compute_final_emotion(wav2vec2_probs, kobert_probs, kobert_labels):
-    # 음성 기반에서 가장 강한 감정 선택
+def compute_final_emotion(wav2vec2_probs, kobert_probs):
     wav_top_index = int(torch.tensor(wav2vec2_probs).argmax())
     wav_top_emotion = wav2vec2_labels[wav_top_index]
-
-    if wav_top_emotion not in EMOTION_EN_TO_INDEX:
-        return "Unknown"
 
     wav_idx = EMOTION_EN_TO_INDEX[wav_top_emotion]
 
     final_scores = []
     for i, label in enumerate(kobert_labels):
-        if label == "Normal":  # 제외
-            final_scores.append(0.0)
-            continue
-        if label == "Aversion":
-            label = "Disgust"  # 혼합 허용도 매핑 위해 이름 통일
-
         if label not in EMOTION_EN_TO_INDEX:
             final_scores.append(0.0)
             continue
@@ -142,7 +133,6 @@ def compute_final_emotion(wav2vec2_probs, kobert_probs, kobert_labels):
 
 
 def full_multimodal_analysis(audio_path: str):
-    # soundfile.read → mono → 16kHz 리샘플링
     audio_np, sr = sf.read(audio_path)
     if audio_np.ndim > 1:
         audio_np = np.mean(audio_np, axis=1)
@@ -150,7 +140,6 @@ def full_multimodal_analysis(audio_path: str):
         audio_np = librosa.resample(audio_np, orig_sr=sr, target_sr=16000)
         sr = 16000
 
-    # Whisper → 텍스트 생성
     whisper_inputs = processor(audio_np, sampling_rate=16000, return_tensors="pt").to(
         device
     )
@@ -174,10 +163,9 @@ def full_multimodal_analysis(audio_path: str):
         probs = torch.sigmoid(logits).cpu().numpy()[0]
 
     emotion_text = probs.tolist()
-    # api 텍스트 요약
+
     summary = summarize(text)
 
-    # Wav2Vec2 기반 음성 감정 분류
     w2v_inputs = wav2vec2_processor(
         audio_np,
         sampling_rate=16000,
@@ -191,7 +179,7 @@ def full_multimodal_analysis(audio_path: str):
 
     emotion_audio = [float(w2v_probs_arr[i]) for i in range(len(wav2vec2_labels))]
 
-    final_emotion = compute_final_emotion(emotion_audio, emotion_text, kobert_labels)
+    final_emotion = compute_final_emotion(emotion_audio, emotion_text)
 
     print(text)
     return summary, final_emotion

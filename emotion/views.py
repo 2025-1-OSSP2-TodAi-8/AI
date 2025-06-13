@@ -10,7 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 
 
-EMOTION_LABELS = ["화남", "슬픔", "혐오", "행복", "공포", "놀람"]
+EMOTION_LABELS = ["행복", "슬픔", "화남", "놀람", "공포", "혐오"]
 
 
 @api_view(["POST"])
@@ -47,7 +47,7 @@ def emotions_day(request):
         )
 
     probs = diary.emotion or []
-    
+
     max_idx = max(range(len(probs)), key=lambda i: probs[i])
     label = EMOTION_LABELS[max_idx]
 
