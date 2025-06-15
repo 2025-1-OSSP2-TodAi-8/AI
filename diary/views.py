@@ -189,7 +189,7 @@ def marking(request):
     )
 
 
-EMOTION_LABELS = ["화남", "슬픔", "혐오", "행복", "공포", "놀람"]
+EMOTION_LABELS = ["행복", "슬픔", "화남", "놀람", "공포", "혐오"]
 
 
 @api_view(["POST"])

@@ -46,7 +46,6 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])  # 인증된 사용자만 접근 가능(토큰 기반 인증 거침)
 def getPeopleInfo(request):
-
     person = request.user
 
     # 연동이 된 보호자 계정들 조회
