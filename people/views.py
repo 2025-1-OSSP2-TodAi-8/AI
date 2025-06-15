@@ -167,7 +167,6 @@ def update_showrange(request):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-
     VALID_RANGE = ["partial", "full"]
 
     if new_range not in VALID_RANGE:
@@ -379,7 +378,7 @@ class LogoutView(APIView):
             )
 
 
-EMOTION_LABELS = ["화남", "슬픔", "혐오", "행복", "공포", "놀람"]
+EMOTION_LABELS = ["행복", "슬픔", "화남", "놀람", "공포", "혐오"]
 
 
 # 보호자 페이지_공개범위 partial, full 공통
