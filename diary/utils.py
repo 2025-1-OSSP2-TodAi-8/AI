@@ -2,11 +2,11 @@
 
 import os
 import torch
-import torch.nn as nn
 import numpy as np
 import soundfile as sf
 import librosa
 import openai
+from django.conf import settings
 
 from transformers import (
     WhisperProcessor,
@@ -87,7 +87,7 @@ whisper_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(dev
 whisper_model.eval()
 
 
-checkpoint_path = "/Users/jaehyuk/Desktop/projects/TodAi/diary/emotion-text"
+checkpoint_path = f"{settings.BASE_DIR}/diary/emotion-text"
 
 kmodel = AutoModelForSequenceClassification.from_pretrained(
     checkpoint_path,
