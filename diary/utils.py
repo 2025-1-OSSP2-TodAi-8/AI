@@ -1,185 +1,236 @@
-# emotions/utils.py
-
 import os
-import torch
+import json
+import tempfile
 import numpy as np
-import soundfile as sf
 import librosa
-import openai
-from django.conf import settings
+import soundfile as sf
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from faster_whisper import WhisperModel
 
-from transformers import (
-    WhisperProcessor,
-    WhisperForConditionalGeneration,
-    Wav2Vec2Processor,
-    Wav2Vec2ForSequenceClassification,
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-)
+# -------------------- 경로 설정 --------------------
+BASE_DIR = os.path.dirname(os.path.realpath(__file__))
+TEXT_DIR = os.path.join(BASE_DIR, "text")  # 학습된 텍스트 감정 모델 디렉토리
+AUDIO_STATE_PATH = os.path.join(BASE_DIR, "audio", "pytorch_model.pth")
 
-from kobert_transformers import get_tokenizer
-
-wav2vec2_labels = ["Angry", "Sadness", "Disgust", "Happiness", "Fear", "Surprise"]
-
-kobert_labels = ["Happiness", "Sadness", "Angry", "Surprise", "Fear", "Disgust"]
-
-
-MIX_MATRIX = [
-    # "기쁨", "슬픔", "분노", "놀람", "공포", "혐오"
-    [0.444, 0.222, 0.0, 0.333, 0.0, 0.0],  # 기쁨
-    [0.111, 0.222, 0.167, 0.167, 0.222, 0.111],  # 슬픔
-    [0.0, 0.1875, 0.1875, 0.125, 0.25, 0.25],  # 분노
-    [0.176, 0.176, 0.118, 0.176, 0.235, 0.118],  # 놀람
-    [0.0, 0.210, 0.210, 0.210, 0.210, 0.158],  # 공포
-    [0.0, 0.118, 0.235, 0.118, 0.176, 0.235],  # 혐오
-]
-
-EMOTION_KR_TO_EN = {
-    "기쁨": "Happiness",
-    "슬픔": "Sadness",
-    "분노": "Angry",
-    "놀람": "Surprise",
-    "공포": "Fear",
-    "혐오": "Disgust",
-}
-
-EMOTION_EN_TO_INDEX = {
-    "Happiness": 0,
-    "Sadness": 1,
-    "Angry": 2,
-    "Surprise": 3,
-    "Fear": 4,
-    "Disgust": 5,
-}
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-
-def summarize(text: str) -> str:
-    prompt = (
-        """한 사람이 작성한 일기를 제공할꺼야, 다음 형식을 맞춰서 요약해,
-            오늘은 (인간의 6가지 감정 분노,슬픔,혐오,행복,두려움,놀람 중 1개를 예측)을 느낀 하루 이셨군요
-            (텍스트에서 찾은 원인)하셔서
-            (1줄에서 판단한 감정)하게 느꼈던 날이었군요 ~하셨을 것 같아요.
-            어떤 감정을 느끼는지에 중점을 두어 공감식으로 요약해:\n\n"""
-        f"{text}\n\n"
-        "요약:"
-    )
-    resp = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=150,
-        n=1,
-    )
-    return resp.choices[0].message.content.strip()
-
-
-# 장치 설정
+# -------------------- 디바이스/Whisper 세팅 --------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# CPU에서는 int8 추천, GPU면 float16 권장
+compute_type = "float16" if device.type == "cuda" else "int8"
 
-# Whisper 모델 로드
-model_id = "openai/whisper-base"
-processor = WhisperProcessor.from_pretrained(model_id)
+# 전역 싱글톤처럼 한번만 로드
+_whisper = WhisperModel("large-v3", device=device.type, compute_type=compute_type)
 
-whisper_model = WhisperForConditionalGeneration.from_pretrained(model_id).to(device)
-
-whisper_model.eval()
-
-
-checkpoint_path = f"{settings.BASE_DIR}/diary/emotion-text"
-
-kmodel = AutoModelForSequenceClassification.from_pretrained(
-    checkpoint_path,
-    num_labels=6,
-    problem_type="multi_label_classification",
-    local_files_only=True,
-)
-tokenizer = AutoTokenizer.from_pretrained("monologg/kobert", trust_remote_code=True)
-
-
-# Wav2Vec2 기반 음성 감정 분류기 로드
-SAVED_W2VEMO_DIR = os.path.join(os.path.dirname(__file__), "emotion-audio")
-wav2vec2_processor = Wav2Vec2Processor.from_pretrained(
-    SAVED_W2VEMO_DIR, local_files_only=True
-)
-wav2vec2_emotion_model = Wav2Vec2ForSequenceClassification.from_pretrained(
-    SAVED_W2VEMO_DIR,
-    local_files_only=True,
-    num_labels=6,
-    problem_type="multi_label_classification",
-).to(device)
-wav2vec2_emotion_model.eval()
-
-
-def compute_final_emotion(wav2vec2_probs, kobert_probs):
-    wav_top_index = int(torch.tensor(wav2vec2_probs).argmax())
-    wav_top_emotion = wav2vec2_labels[wav_top_index]
-
-    wav_idx = EMOTION_EN_TO_INDEX[wav_top_emotion]
-
-    final_scores = []
-    for i, label in enumerate(kobert_labels):
-        if label not in EMOTION_EN_TO_INDEX:
-            final_scores.append(0.0)
-            continue
-
-        ko_idx = EMOTION_EN_TO_INDEX[label]
-        compatibility = MIX_MATRIX[ko_idx][wav_idx]
-        weighted_score = (kobert_probs[i] + compatibility) / 2
-        final_scores.append(weighted_score)
-
-    return torch.tensor(final_scores).tolist()
-
-
-def full_multimodal_analysis(audio_path: str):
-    audio_np, sr = sf.read(audio_path)
-    if audio_np.ndim > 1:
-        audio_np = np.mean(audio_np, axis=1)
-    if sr != 16000:
-        audio_np = librosa.resample(audio_np, orig_sr=sr, target_sr=16000)
-        sr = 16000
-
-    whisper_inputs = processor(audio_np, sampling_rate=16000, return_tensors="pt").to(
-        device
+# -------------------- 텍스트 감정 모델 로딩 --------------------
+try:
+    _tok = AutoTokenizer.from_pretrained(TEXT_DIR)
+    _text_model = (
+        AutoModelForSequenceClassification.from_pretrained(TEXT_DIR).to(device).eval()
     )
-    with torch.no_grad():
-        generated_ids = whisper_model.generate(
-            **whisper_inputs, max_new_tokens=256, num_beams=5, no_repeat_ngram_size=3
-        )
-    text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+except Exception as e:
+    raise RuntimeError(f"[TEXT MODEL] 로드 실패: {e}. TEXT_DIR={TEXT_DIR}")
 
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        padding="max_length",
-        max_length=128,
-    ).to(kmodel.device)
+with open(os.path.join(TEXT_DIR, "label_map.json"), "r", encoding="utf-8") as f:
+    _lm = json.load(f)
+_id2label = {int(k): v for k, v in _lm["id2label"].items()}
+_NUM_LABELS_TEXT = len(_id2label)
 
-    with torch.no_grad():
-        outputs = kmodel(**inputs)
-        logits = outputs.logits
-        probs = torch.sigmoid(logits).cpu().numpy()[0]
 
-    emotion_text = probs.tolist()
+def split_sents(text: str):
+    import re
 
-    summary = summarize(text)
+    return [s.strip() for s in re.split(r"[.?!\n]", text) if s.strip()]
 
-    w2v_inputs = wav2vec2_processor(
-        audio_np,
-        sampling_rate=16000,
-        return_tensors="pt",
-        padding=True,
-    ).to(device)
+
+def analyze_text_emotion(text: str, max_len=256):
+    """
+    문장 단위로 inference → 퍼센트 결과(dict)와 총합/문장별 라벨 반환
+    """
+    sents = split_sents(text)
+    if not sents:
+        return {"percent": {}, "total": 0, "details": [], "text": text}
+
+    counts = {_id2label[i]: 0 for i in range(_NUM_LABELS_TEXT)}
+    details = []
 
     with torch.no_grad():
-        w2v_outputs = wav2vec2_emotion_model(**w2v_inputs)
-        w2v_probs_arr = w2v_outputs.logits.squeeze().cpu().numpy()
+        for s in sents:
+            enc = _tok(
+                s,
+                truncation=True,
+                padding=True,
+                max_length=max_len,
+                return_tensors="pt",
+            ).to(device)
+            logits = _text_model(**enc).logits
+            pred = int(logits.argmax(-1).item())
+            lab = _id2label[pred]
+            counts[lab] += 1
+            details.append((s, lab))
 
-    emotion_audio = [float(w2v_probs_arr[i]) for i in range(len(wav2vec2_labels))]
+    total = sum(counts.values())
+    if total == 0:
+        perc = {lab: 0.0 for lab in counts.keys()}
+    else:
+        perc = {lab: round((cnt / total) * 100, 2) for lab, cnt in counts.items()}
 
-    final_emotion = compute_final_emotion(emotion_audio, emotion_text)
+    return {"percent": perc, "total": total, "details": details, "text": text}
 
-    print(text)
-    return summary, final_emotion
+
+# -------------------- 오디오 감정 모델 --------------------
+class PyTorchAudioModel(nn.Module):
+    def __init__(self, num_labels=6):
+        super().__init__()
+        self.conv1 = nn.Conv1d(13, 64, kernel_size=5, padding="same")
+        self.bn1 = nn.BatchNorm1d(64)
+        self.pool1 = nn.MaxPool1d(2, 2)
+
+        self.conv2 = nn.Conv1d(64, 128, kernel_size=3, padding="same")
+        self.bn2 = nn.BatchNorm1d(128)
+        self.pool2 = nn.MaxPool1d(2, 2)
+
+        self.bilstm = nn.LSTM(128, 64, bidirectional=True, batch_first=True)
+
+        self.dense1 = nn.Linear(128, 128)
+        self.dense2 = nn.Linear(128, num_labels)
+
+    def forward(self, x):
+        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
+        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
+        x = x.permute(0, 2, 1)  # (B,C,L)->(B,L,C)
+        _, (h_n, _) = self.bilstm(x)
+        x = torch.cat([h_n[-2], h_n[-1]], dim=1)
+        x = F.relu(self.dense1(x))
+        return self.dense2(x)
+
+
+_audio_model = PyTorchAudioModel(num_labels=6).to(device)
+_audio_model.load_state_dict(torch.load(AUDIO_STATE_PATH, map_location=device))
+_audio_model.eval()
+
+EMOTION_LABELS_EN = ["ANGRY", "SAD", "DISGUST", "HAPPY", "FEAR", "SURPRISE"]
+
+# 베이스라인 (남성 예시) — 필요 시 설정에서 주입 가능
+BASE_LINE_MEAN_MALE = np.array(
+    [
+        -488.7764,
+        75.9438,
+        6.369161,
+        21.888578,
+        5.252565,
+        12.948459,
+        -2.9029474,
+        2.1715217,
+        6.144363,
+        2.0456758,
+        -4.0672646,
+        1.4047805,
+        -0.85426885,
+    ],
+    dtype=np.float32,
+)
+BASE_LINE_STD_MALE = np.array(
+    [
+        11.675788,
+        12.669461,
+        5.7222886,
+        4.909043,
+        4.4742537,
+        5.8538017,
+        3.2380152,
+        4.0887833,
+        1.9294198,
+        2.4097118,
+        2.7102668,
+        1.6911668,
+        1.7729696,
+    ],
+    dtype=np.float32,
+)
+
+
+def ensure_16k_mono(in_path: str) -> str:
+    """입력 파일을 16kHz mono로 변환한 wav 경로 반환(같은 디렉토리에 *_16k.wav 생성)"""
+    y, sr = librosa.load(in_path, sr=16000, mono=True)
+    out_path = (
+        in_path if in_path.endswith("_16k.wav") else in_path.replace(".wav", "_16k.wav")
+    )
+    sf.write(out_path, y, 16000)
+    return out_path
+
+
+def transcribe_whisper(wav_path: str, lang="ko") -> str:
+    """Whisper로 텍스트 추출"""
+    segments, info = _whisper.transcribe(
+        wav_path,
+        language=lang,
+        vad_filter=True,
+        word_timestamps=True,
+        beam_size=5,
+    )
+    return "".join(seg.text for seg in segments)
+
+
+def extract_sequence_features(wav_path: str, max_len=100):
+    """MFCC 13차 추출 후 (max_len, 13)로 패딩/자르기"""
+    y, sr = librosa.load(wav_path, sr=None)
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13).T
+    if len(mfcc) < max_len:
+        pad = max_len - len(mfcc)
+        mfcc = np.pad(mfcc, ((0, pad), (0, 0)), mode="constant")
+    else:
+        mfcc = mfcc[:max_len]
+    return mfcc
+
+
+def analyze_audio_emotion(wav_path: str):
+    """오디오 기반 감정 확률 및 Top-1 반환"""
+    features = extract_sequence_features(wav_path, max_len=100)  # (100,13)
+    eps = 1e-8
+    delta = (features - BASE_LINE_MEAN_MALE) / (BASE_LINE_STD_MALE + eps)
+    x = (
+        torch.from_numpy(delta[None].transpose(0, 2, 1)).float().to(device)
+    )  # (1,13,100)
+
+    with torch.no_grad():
+        logits = _audio_model(x)
+        probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
+
+    top_idx = int(np.argmax(probs))
+    return {
+        "probs": {lab: float(probs[i]) for i, lab in enumerate(EMOTION_LABELS_EN)},
+        "top1": {"label": EMOTION_LABELS_EN[top_idx], "prob": float(probs[top_idx])},
+    }
+
+
+def run_pipeline_on_uploaded_file(django_file, lang="ko"):
+    """
+    업로드된 파일을 임시 디렉토리에 저장→16k 변환→STT→텍스트/오디오 감정 분석→임시파일 자동 삭제
+    """
+    with tempfile.TemporaryDirectory() as td:
+        in_path = os.path.join(td, "input.wav")
+        # chunk 단위 저장
+        with open(in_path, "wb") as f:
+            for chunk in django_file.chunks():
+                f.write(chunk)
+
+        # 16k 변환
+        p16 = ensure_16k_mono(in_path)
+
+        # 1) STT
+        text = transcribe_whisper(p16, lang=lang)
+
+        # 2) 텍스트 감정
+        text_result = analyze_text_emotion(text)
+
+        # 3) 오디오 감정
+        audio_result = analyze_audio_emotion(p16)
+
+        # TemporaryDirectory 컨텍스트를 벗어나면 파일 자동 삭제
+        return {
+            "stt_text": text,
+            "text_emotion": text_result,  # {"percent": {...}, "total": int, "details": [...], "text": str}
+            "audio_emotion": audio_result,  # {"probs": {...}, "top1": {...}}
+        }
