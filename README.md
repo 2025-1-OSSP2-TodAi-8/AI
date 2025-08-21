@@ -46,14 +46,11 @@
 
 권장 샘플링 레이트: 16kHz mono (다른 경우 자동 변환됨)
 
-``` python
-from pipeline import run_pipeline_on_uploaded_file
-
-def upload_view(request):
-    if request.method == "POST":
-        audio_file = request.FILES["audioFile"]
-        result = run_pipeline_on_uploaded_file(audio_file, gender="MALE", lang="ko")
-        return JsonResponse(result)
+``` json
+{
+	"gender":"MALE or FEMALE",
+	"audio":"음성파일.wav"
+}
 ```
 
 ## 반환 형식
