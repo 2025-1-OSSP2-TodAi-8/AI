@@ -43,7 +43,7 @@
 
 ### 1. 저장소 클론
 ```bash
-git clone [https://github.com/username/emotion-analysis-pipeline.git](https://github.com/2025-1-OSSP2-TodAi-8/AI.git)
+git clone https://github.com/2025-1-OSSP2-TodAi-8/AI.git
 cd AI
 ```
 2. 의존성 설치
