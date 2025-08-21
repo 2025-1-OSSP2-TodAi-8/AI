@@ -32,6 +32,7 @@
 7. **최종 EN 순서로 정렬**
    - `[ANGRY, SAD, DISGUST, HAPPY, FEAR, SURPRISE]` →  
      `[HAPPY, SAD, ANGRY, SURPRISE, FEAR, DISGUST]`
+     해당변환은 학습 시킨 모델의 출력 양식에 따라 적절히 수정하여 사용될 수 있습니다.
 
 8. **공감 요약 생성**
    - OpenAI GPT(`gpt-4o-mini`)로 공감적인 한국어 요약 생성
