@@ -62,7 +62,7 @@ export OPENAI_API_KEY=your_openai_api_key
 
 지원 파일 형식: .wav
 
-권장 샘플링 레이트: 16kHz mono (다른 경우 자동 변환됨)
+권장 샘플링 레이트: 16kHz mono
 
 ``` json
 {
