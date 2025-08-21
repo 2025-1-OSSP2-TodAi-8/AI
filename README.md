@@ -57,7 +57,7 @@
 
 ```json
 {
-  "summary": "오늘 하루가 많이 힘드셨군요, 그래도 스스로 버텨내신 점이 대단해요.",
+  "summary": "햇살 좋은 날에 뛰어다니며 가벼운 기분을 느끼고 웃음이 절로 나는 행복한 하루를 보냈군요. 이 기분을 오랫동안 간직하고 싶어 하셨을 것 같아요.",
   "emotion": [0.52, 0.12, 0.08, 0.15, 0.10, 0.03],
   "emotion_labels": ["HAPPY", "SAD", "ANGRY", "SURPRISE", "FEAR", "DISGUST"]
 }
@@ -68,7 +68,7 @@ emotion: [HAPPY, SAD, ANGRY, SURPRISE, FEAR, DISGUST] 순서의 확률 값
 
 emotion_labels: 확률 벡터와 매칭되는 레이블 순서
 
-## 🔧 기술 스택
+## 기술 스택
 STT: faster-whisper
 
 텍스트 감정 분석: HuggingFace Transformers (HyukII/text-emotion-model)
