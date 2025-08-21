@@ -19,11 +19,12 @@ PyTorch 커스텀 모델(model.py) + 가중치(pytorch_model.pth)
 
 설치
 # Python 3.9+
+``` command
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu  # (GPU면 본인 환경에 맞게)
 pip install transformers huggingface_hub safetensors
 pip install faster-whisper librosa soundfile numpy
 pip install openai  # 요약을 쓸 경우
-
+```
 
 개발 서버에서 토크나이저 경고를 줄이려면 환경변수 설정:
 TOKENIZERS_PARALLELISM=false
