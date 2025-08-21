@@ -192,7 +192,7 @@ torch.cuda.is_available()에 따라 자동 선택. Whisper compute_type도 자�
 huggingface_hub는 다운로드 파일을 로컬 캐시에 보관합니다(오프라인 재사용 가능).
 
 #### 경고 방지 설정
-TOKENIZERS_PARALLELISM=false 권장(Django dev server의 autoreload/fork 시 경고 방지).
+- TOKENIZERS_PARALLELISM=false 권장(Django dev server의 autoreload/fork 시 경고 방지).
 
 #### 라벨 순서 불일치 주의
 오디오 labels.json과 매핑 행렬(EN)의 순서가 반드시 일치해야 합니다.
