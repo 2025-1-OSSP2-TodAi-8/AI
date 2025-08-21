@@ -21,7 +21,6 @@ utils.py 하나로 동작하며, 모델/가중치/베이스라인 벡터는 Hugg
 #### 요약 처리
 - OpenAI Chat Completions (gpt-4o-mini)
 
-설치
 # Python 3.9+
 ``` command
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu  # (GPU면 본인 환경에 맞게)
