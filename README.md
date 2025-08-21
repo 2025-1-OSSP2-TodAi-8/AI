@@ -40,7 +40,7 @@
 ---
 ## 요청 형식 (Input Format)
 
-입력: Django UploadedFile 객체 (예: request.FILES['audioFile'])
+입력: Django UploadedFile 객체 (예: request.FILES['audio'])
 
 지원 파일 형식: .wav
 
@@ -49,7 +49,7 @@
 ``` json
 {
 	"gender":"MALE or FEMALE",
-	"audio":"음성파일.wav"
+	"audio":음성파일.wav
 }
 ```
 
