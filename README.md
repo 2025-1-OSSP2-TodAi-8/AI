@@ -29,7 +29,7 @@ pip install openai  # 요약을 쓸 경우
 개발 서버에서 토크나이저 경고를 줄이려면 환경변수 설정:
 TOKENIZERS_PARALLELISM=false
 
-환경 변수
+## 환경 변수
 
 OPENAI_API_KEY (선택): 요약 생성에 필요. 없으면 "summary": "(요약 실패) ..." 형태로 반환됨.
 
@@ -53,18 +53,19 @@ gender: "MALE" 또는 "FEMALE" (오디오 정규화용 베이스라인 선택)
 lang: STT 언어 코드 (기본 "ko")
 
 출력(JSON)
+```json
 {
   "summary": "공감형 한두 문장 요약(또는 요약 실패 메시지)",
   "emotion_analysis": [p0, p1, p2, p3, p4, p5]
 }
-
+```
 
 emotion_analysis는 한국어 6라벨 순서로 확률(0~1) 배열을 제공합니다.
 라벨 순서는 텍스트 모델의 id2label에서 가져오며, 기본은:
 
-['기쁨','당황','분노','불안','상처','슬픔']
+['기쁨', '당황', '분노', '불안', '상처', '슬픔']
 
-동작 흐름
+## 동작 흐름
 
 STT: Whisper로 업로드된 음성을 텍스트로 전사
 
@@ -85,8 +86,12 @@ KO(텍스트) → EN(오디오)로 투영 후, 텍스트 0.7 + 오디오 0.3 가
 다시 EN → KO로 근사 역투영 → 최종 KO 확률 벡터
 
 요약: 입력 텍스트를 공감형으로 1–2문장 요약(옵션)
+### 최종 결과
 
-빠른 사용 예시 (Django view)
+<img width="800" height="200" alt="image" src="https://github.com/user-attachments/assets/85639f9f-6f75-4fd8-a37d-accc1ec8ce26" />
+
+
+# 빠른 사용 예시 (Django view)
 # views.py
 ``` python
 from django.http import JsonResponse
