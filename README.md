@@ -184,6 +184,6 @@ GPU 사용: torch.cuda.is_available()에 따라 자동 선택. Whisper compute_t
 
 모델과 코드의 라이선스는 각 리포의 LICENSE를 따릅니다.
 
-Whisper 모델: faster-whisper
+모델 정보는 같은 model 
 
-Transformers & HF Hub: 🤗 Hugging Face
+Whisper 모델: faster-whisper
