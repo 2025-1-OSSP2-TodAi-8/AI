@@ -15,7 +15,7 @@ PyTorch 커스텀 모델(model.py) + 가중치(pytorch_model.pth)
 
 베이스라인 벡터(baseline_mean_*.npy, baseline_std_*.npy) — (X−mean)/(std+1e−8)
 
-요약: OpenAI Chat Completions (gpt-4o-mini) – 선택적
+요약 처리: OpenAI Chat Completions (gpt-4o-mini)
 
 설치
 # Python 3.9+
@@ -182,7 +182,7 @@ GPU 사용: torch.cuda.is_available()에 따라 자동 선택. Whisper compute_t
 
 라이선스 & 크레딧
 
-모델과 코드의 라이선스는 각 HF 리포의 README.md/LICENSE를 따릅니다.
+모델과 코드의 라이선스는 각 리포의 LICENSE를 따릅니다.
 
 Whisper 모델: faster-whisper
 
