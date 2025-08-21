@@ -52,7 +52,6 @@ if _id2label is None:
 
 # 파생 값
 _KO_LABELS = [_id2label[i] for i in range(len(_id2label))]
-_NUM_LABELS_TEXT = len(_id2label)
 
 
 def split_sents(text: str):
@@ -269,8 +268,7 @@ def empathetic_summary(text: str) -> str:
     최신 SDK(OpenAI 1.x)와 구버전(openai 0.x) 모두 지원 시도.
     """
     prompt = (
-        "다음 일기를 한국어로 1~2문장, 공감하는 톤으로 요약해 주세요. ex) ~하셨군요, ~하셨을 것 같아요"
-        "상대방의 감정을 인정하며 과장하지 말고, 존댓말로 간결하게 작성하세요.\n\n"
+        "다음 일기를 한국어로 1~2문장, 요약해 주세요. ex) ~하셨군요, ~ 행복 하셨을 것 같아요"
         f"일기:\n{text}\n\n"
         "출력 형식: 한 문단의 자연스러운 문장 (따옴표 없이)"
     )
@@ -331,5 +329,5 @@ def run_pipeline_on_uploaded_file(django_file, gender="MALE", lang="ko"):
         return {
             "summary": summary,
             # KO 라벨 순서 고정: ['기쁨','당황','분노','불안','상처','슬픔']
-            "emotion_analysis": [float(x) for x in fused_ko.tolist()],
+            "emotion": [float(x) for x in fused_ko.tolist()],
         }
