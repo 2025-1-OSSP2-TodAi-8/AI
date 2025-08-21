@@ -101,14 +101,7 @@ def analyze_view(request):
     return JsonResponse(result, json_dumps_params={"ensure_ascii": False})
 ```
 
-curl 테스트:
-
-curl -X POST http://localhost:8000/api/diary/analyze \
-  -F "file=@/path/to/sample.wav" \
-  -F "gender=MALE" \
-  -F "lang=ko"
-
-스탠드얼론 테스트 (파이프라인 함수 직접 호출)
+stand alone 테스트 (파이프라인 함수 직접 호출)
 ``` python
 from pathlib import Path
 from types import SimpleNamespace
