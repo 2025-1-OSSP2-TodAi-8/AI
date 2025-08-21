@@ -1,4 +1,4 @@
-# 🎙 Emotion Analysis Pipeline
+# 감정 분석 파이프라인
 
 이 프로젝트는 **음성 파일을 입력 받아 텍스트(STT 변환)와 오디오 특징**을 기반으로 감정을 분석하고, 결과를  
 **[HAPPY, SAD, ANGRY, SURPRISE, FEAR, DISGUST]** 순서의 확률 벡터로 반환하는 파이프라인입니다.  
@@ -6,7 +6,7 @@
 
 ---
 
-## 📌 처리 흐름
+## 처리 흐름
 
 1. **업로드된 음성 파일 저장**
    - Django `UploadedFile` 객체를 임시 디렉토리에 저장
