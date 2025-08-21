@@ -2,12 +2,14 @@ import os, json, tempfile, numpy as np, librosa, soundfile as sf, openai
 import torch, torch.nn as nn, torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from faster_whisper import WhisperModel
+from huggingface_hub import hf_hub_download
+from importlib.machinery import SourceFileLoader
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
+HF_TEXT_REPO_ID = "HyukII/text-emotion-model"
+HF_AUDIO_REPO_ID = "HyukII/audio-emotion-model"
 # -------------------- 경로/장치 --------------------
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-TEXT_DIR = os.path.join(BASE_DIR, "text")
 
 AUDIO_DIR = os.path.join(BASE_DIR, "audio")
 AUDIO_STATE_PATH = os.path.join(AUDIO_DIR, "pytorch_model.pth")
@@ -21,20 +23,35 @@ compute_type = "float16" if device.type == "cuda" else "int8"
 _whisper = WhisperModel("large-v3", device=device.type, compute_type=compute_type)
 
 # -------------------- 텍스트 감정 모델 --------------------
-try:
-    _tok = AutoTokenizer.from_pretrained(TEXT_DIR)
-    _text_model = (
-        AutoModelForSequenceClassification.from_pretrained(TEXT_DIR).to(device).eval()
-    )
-except Exception as e:
-    raise RuntimeError(f"[TEXT MODEL] 로드 실패: {e}. TEXT_DIR={TEXT_DIR}")
+_tok = AutoTokenizer.from_pretrained(HF_TEXT_REPO_ID, use_fast=True)
+_text_model = AutoModelForSequenceClassification.from_pretrained(HF_TEXT_REPO_ID).eval()
 
-with open(os.path.join(TEXT_DIR, "label_map.json"), "r", encoding="utf-8") as f:
-    _lm = json.load(f)
-_id2label = {int(k): v for k, v in _lm["id2label"].items()}  # 0~5 → 한글 라벨
-_KO_LABELS = [
-    _id2label[i] for i in range(len(_id2label))
-]  # ['기쁨','당황','분노','불안','상처','슬픔']
+# 1) config.json에 라벨이 있으면 그걸 쓰기
+cfg_id2label = getattr(_text_model.config, "id2label", None)
+_id2label = None
+if isinstance(cfg_id2label, dict) and len(cfg_id2label) > 0:
+    _id2label = {int(k): v for k, v in cfg_id2label.items()}
+
+# 2) 없으면 리포에서 label_map.json만 다운로드해서 사용
+if _id2label is None:
+    try:
+        lm_path = hf_hub_download(repo_id=HF_TEXT_REPO_ID, filename="label_map.json")
+        with open(lm_path, "r", encoding="utf-8") as f:
+            lm = json.load(f)
+        _id2label = {int(k): v for k, v in lm["id2label"].items()}
+    except Exception:
+        # 3) 최후 폴백(프로젝트 표준 라벨 순서)
+        _id2label = {
+            0: "기쁨",
+            1: "당황",
+            2: "분노",
+            3: "불안",
+            4: "상처",
+            5: "슬픔",
+        }
+
+# 파생 값
+_KO_LABELS = [_id2label[i] for i in range(len(_id2label))]
 _NUM_LABELS_TEXT = len(_id2label)
 
 
@@ -76,53 +93,67 @@ def analyze_text_emotion(text: str, max_len=256):
 
 
 # -------------------- 오디오 감정 모델 --------------------
-# audio/model.py 에서 클래스 가져오기
-from .audio.model import PyTorchAudioModel  # 앱 패키지로 실행
-
-try:
-    with open(LABELS_PATH, "r", encoding="utf-8") as f:
-        EMOTION_LABELS_EN = json.load(
-            f
-        )  # 예: ["ANGRY","SAD","DISGUST","HAPPY","FEAR","SURPRISE"]
-    assert isinstance(EMOTION_LABELS_EN, list) and len(EMOTION_LABELS_EN) == 6
-except Exception:
-    EMOTION_LABELS_EN = ["ANGRY", "SAD", "DISGUST", "HAPPY", "FEAR", "SURPRISE"]
-
-_audio_model = PyTorchAudioModel(num_labels=6).to(device)
-_audio_model.load_state_dict(torch.load(AUDIO_STATE_PATH, map_location=device))
-_audio_model.eval()
-
-# ---- Baseline (남/여) ----
-BASELINE_FILES = {
-    "MALE": {
-        "mean": os.path.join(AUDIO_DIR, "baseline_mean_male.npy"),
-        "std": os.path.join(AUDIO_DIR, "baseline_std_male.npy"),
-    },
-    "FEMALE": {
-        "mean": os.path.join(AUDIO_DIR, "baseline_mean_female.npy"),
-        "std": os.path.join(AUDIO_DIR, "baseline_std_female.npy"),
-    },
-}
+def _download_audio_file(filename: str) -> str:
+    """Hugging Face Hub에서 파일 하나 다운로드 후 캐시 경로 반환"""
+    return hf_hub_download(repo_id=HF_AUDIO_REPO_ID, filename=filename)
 
 
-def _load_baseline(gender: str):
+def _load_audio_labels() -> list:
+    path = _download_audio_file("labels.json")
+    with open(path, "r", encoding="utf-8") as f:
+        labels = json.load(f)
+    if not isinstance(labels, list) or len(labels) == 0:
+        raise ValueError("labels.json must be a non-empty list")
+    return labels
+
+
+def _load_audio_model(device: torch.device):
+    """
+    - model.py 를 동적으로 import
+    - pytorch_model.pth(state_dict) 로드
+    - labels.json 길이에 맞춰 num_labels 세팅
+    """
+    labels = _load_audio_labels()
+    model_py = _download_audio_file("model.py")
+    weights = _download_audio_file("pytorch_model.pth")
+
+    # model.py에서 클래스 동적 로드
+    amodule = SourceFileLoader("audio_model_module", model_py).load_module()
+    ModelClass = amodule.PyTorchAudioModel
+
+    model = ModelClass(num_labels=len(labels)).to(device).eval()
+    state = torch.load(weights, map_location=device)
+    model.load_state_dict(state)
+    return model, labels
+
+
+def _load_baseline_from_hub(gender: str):
+    """
+    baseline_mean_* / baseline_std_* 를 Hub에서 npy로 로드
+    """
     g = (gender or "MALE").strip().upper()
-    if g not in BASELINE_FILES:
+    if g not in ("MALE", "FEMALE"):
         g = "MALE"
-    mean_path = BASELINE_FILES[g]["mean"]
-    std_path = BASELINE_FILES[g]["std"]
 
-    if not os.path.exists(mean_path) or not os.path.exists(std_path):
-        raise FileNotFoundError(
-            f"Baseline npy not found for {g}. " f"expected: {mean_path}, {std_path}"
-        )
+    mean_file = f"baseline_mean_{g.lower()}.npy"
+    std_file = f"baseline_std_{g.lower()}.npy"
+
+    mean_path = _download_audio_file(mean_file)
+    std_path = _download_audio_file(std_file)
+
     mean = np.load(mean_path).astype(np.float32).reshape(-1)
     std = np.load(std_path).astype(np.float32).reshape(-1)
     return mean, std
 
 
+# 실제 로드
+_audio_model, EMOTION_LABELS_EN = _load_audio_model(device)
+
+
 def _pick_baseline(gender: str):
-    return _load_baseline(gender)
+    # 기존 함수명 유지 (내부에서 Hub에서 로드)
+    return _load_baseline_from_hub(gender)
+
 
 # -------------------- 신호/전사 --------------------
 def ensure_16k_mono(in_path: str) -> str:

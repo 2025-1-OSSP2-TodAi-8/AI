@@ -37,9 +37,6 @@ node_modules/
 dist/
 build/
 
-audio/
-text/
-
 test/
 
 README.md
