@@ -54,7 +54,7 @@ emotion: [HAPPY, SAD, ANGRY, SURPRISE, FEAR, DISGUST] 순서의 확률 값
 
 emotion_labels: 확률 벡터와 매칭되는 레이블 순서
 
-🔧 기술 스택
+## 🔧 기술 스택
 STT: faster-whisper
 
 텍스트 감정 분석: HuggingFace Transformers (HyukII/text-emotion-model)
@@ -65,34 +65,30 @@ STT: faster-whisper
 
 요약: OpenAI GPT (gpt-4o-mini)
 
-🚀 실행 방법
+## 🚀 실행 방법
 1. 환경 변수 설정
-bash
-복사
-편집
+``` bash
 export OPENAI_API_KEY=your_openai_api_key
+```
 2. Python 의존성 설치
-bash
-복사
-편집
+``` bash
 pip install -r requirements.txt
+```
 3. 파이프라인 실행
-python
-복사
-편집
+``` python
 from pipeline import run_pipeline_on_uploaded_file
 
 result = run_pipeline_on_uploaded_file(django_file, gender="MALE", lang="ko")
 print(result)
-📂 반환 예시
-python
-복사
-편집
+```
+## 📂 반환 예시
+```python
 {
   "summary": "기쁨과 설렘이 가득한 하루를 보내셨군요, 행복한 시간이셨을 것 같아요.",
   "emotion": [0.78, 0.05, 0.04, 0.06, 0.03, 0.04],
   "emotion_labels": ["HAPPY", "SAD", "ANGRY", "SURPRISE", "FEAR", "DISGUST"]
 }
+```
 📜 라이선스
 이 프로젝트는 오픈소스로 공개됩니다. 자유롭게 사용 및 기여해 주세요.
 ---
