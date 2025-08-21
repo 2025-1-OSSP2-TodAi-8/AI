@@ -252,13 +252,11 @@ def _ko_percent_to_prob_vector(perc_dict):
 def fuse_text_audio(
     text_perc_ko: dict, audio_probs_en: np.ndarray, w_text=0.7, w_audio=0.3
 ):
-    """텍스트(KO) -> EN으로 투영 후 오디오(EN)와 가중합 -> 최종 KO 확률 벡터 반환"""
     t_ko = _ko_percent_to_prob_vector(text_perc_ko)  # (6,)
     t_en = _normalize(_M_KO2EN @ t_ko)  # (6,) EN
     a_en = _normalize(audio_probs_en)  # (6,)
     fused_en = _normalize(w_text * t_en + w_audio * a_en)  # (6,) EN
-    fused_ko = _normalize(_M_EN2KO @ fused_en)  # (6,) KO
-    return fused_ko  # KO 순서
+    return fused_en
 
 
 # -------------------- GPT 요약 --------------------
@@ -293,10 +291,22 @@ def empathetic_summary(text: str) -> str:
 
 
 # -------------------- 업로드 파일 파이프라인 --------------------
+# 원하는 최종 EN 라벨 순서
+EMOTION_LABELS_EN_ORDERED = ["HAPPY", "SAD", "ANGRY", "SURPRISE", "FEAR", "DISGUST"]
+
+# 기존 EN 라벨 (모델 출력 순서)
+EMOTION_LABELS_EN_ORIG = ["ANGRY", "SAD", "DISGUST", "HAPPY", "FEAR", "SURPRISE"]
+
+# 재정렬용 인덱스 매핑 (orig → ordered)
+_REORDER_IDX = [EMOTION_LABELS_EN_ORIG.index(lbl) for lbl in EMOTION_LABELS_EN_ORDERED]
+
+
 def run_pipeline_on_uploaded_file(django_file, gender="MALE", lang="ko"):
     """
-    업로드된 파일을 임시 디렉토리에 저장 → 16k 변환 → STT → 텍스트/오디오 감정 → 융합 → 요약
-    반환: { "summary": str, "emotion_analysis": [float x6] }  # KO 순서
+    반환: {
+      "summary": str,
+      "emotion": [float x6]  # EN 순서: [HAPPY,SAD,ANGRY,SURPRISE,FEAR,DISGUST]
+    }
     """
     with tempfile.TemporaryDirectory() as td:
         in_path = os.path.join(td, "input.wav")
@@ -317,17 +327,18 @@ def run_pipeline_on_uploaded_file(django_file, gender="MALE", lang="ko"):
         audio_result = analyze_audio_emotion(p16, gender=gender)
         audio_probs_en = audio_result["vector_en"]  # numpy (6,)
 
-        # 4) 융합 (텍스트 0.7, 오디오 0.3)
-        fused_ko = fuse_text_audio(
-            text_perc_ko, audio_probs_en, w_text=0.7, w_audio=0.3
-        )
+        # 4) 융합 → EN 공간 (모델 기본 순서 [ANGRY,SAD,DISGUST,HAPPY,FEAR,SURPRISE])
+        fused = fuse_text_audio(text_perc_ko, audio_probs_en, w_text=0.7, w_audio=0.3)
 
-        # 5) GPT 요약
+        # 5) 원하는 순서로 재정렬
+        fused_reordered = fused[_REORDER_IDX]
+
+        # 6) GPT 요약
         summary = empathetic_summary(text)
 
-        # 최종 스펙 맞추기
         return {
             "summary": summary,
-            # KO 라벨 순서 고정: ['기쁨','당황','분노','불안','상처','슬픔']
-            "emotion": [float(x) for x in fused_ko.tolist()],
+            # 최종 라벨 순서 고정: [HAPPY,SAD,ANGRY,SURPRISE,FEAR,DISGUST]
+            "emotion": [float(x) for x in fused_reordered.tolist()],
+            "emotion_labels": EMOTION_LABELS_EN_ORDERED,
         }
