@@ -125,7 +125,7 @@ wav = FileObj("/path/to/sample.wav")
 res = run_pipeline_on_uploaded_file(wav, gender="FEMALE", lang="ko")
 print(res)
 ```
-내부 구현 상세 (핵심 포인트)
+# 내부 구현 상세 (utils.py)
 
 텍스트 모델 로딩
 ``` python
@@ -163,7 +163,7 @@ KO 라벨(텍스트): ['기쁨','당황','분노','불안','상처','슬픔']
 
 텍스트 0.7, 오디오 0.3 비율로 융합 (원하면 fuse_text_audio(..., w_text, w_audio) 조정)
 
-주의/팁
+### 주의/팁
 
 요약 비활성화: OPENAI_API_KEY가 없으면 자동으로 실패 메시지를 넣고 넘어갑니다.
 운영에서 요약이 꼭 필요 없다면 empathetic_summary()를 건너뛰도록 수정하세요.
