@@ -10,20 +10,15 @@ import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from faster_whisper import WhisperModel
 
-# -------------------- 경로 설정 --------------------
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-TEXT_DIR = os.path.join(BASE_DIR, "text")  # 학습된 텍스트 감정 모델 디렉토리
+TEXT_DIR = os.path.join(BASE_DIR, "text")
 AUDIO_STATE_PATH = os.path.join(BASE_DIR, "audio", "pytorch_model.pth")
 
-# -------------------- 디바이스/Whisper 세팅 --------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# CPU에서는 int8 추천, GPU면 float16 권장
 compute_type = "float16" if device.type == "cuda" else "int8"
 
-# 전역 싱글톤처럼 한번만 로드
 _whisper = WhisperModel("large-v3", device=device.type, compute_type=compute_type)
 
-# -------------------- 텍스트 감정 모델 로딩 --------------------
 try:
     _tok = AutoTokenizer.from_pretrained(TEXT_DIR)
     _text_model = (
@@ -112,7 +107,6 @@ _audio_model.eval()
 
 EMOTION_LABELS_EN = ["ANGRY", "SAD", "DISGUST", "HAPPY", "FEAR", "SURPRISE"]
 
-# 베이스라인 (남성 예시) — 필요 시 설정에서 주입 가능
 BASE_LINE_MEAN_MALE = np.array(
     [
         -488.7764,
@@ -146,6 +140,43 @@ BASE_LINE_STD_MALE = np.array(
         2.7102668,
         1.6911668,
         1.7729696,
+    ],
+    dtype=np.float32,
+)
+
+BASE_LINE_MEAN_FEMALE = np.array(
+    [
+        -460.19843,
+        46.570786,
+        1.1123316,
+        17.595436,
+        -0.57482404,
+        11.101548,
+        -7.8497324,
+        2.2953954,
+        -2.1675904,
+        -4.268735,
+        -4.0286107,
+        -5.2267838,
+        -6.829859,
+    ],
+    dtype=np.float32,
+)
+BASE_LINE_STD_FEMALE = np.array(
+    [
+        25.068605,
+        10.782973,
+        6.916395,
+        6.7128243,
+        3.8709269,
+        2.940329,
+        3.7364106,
+        2.884662,
+        2.534034,
+        2.1726286,
+        2.3333669,
+        2.8525667,
+        2.571768,
     ],
     dtype=np.float32,
 )
@@ -207,30 +238,20 @@ def analyze_audio_emotion(wav_path: str):
 
 def run_pipeline_on_uploaded_file(django_file, lang="ko"):
     """
-    업로드된 파일을 임시 디렉토리에 저장→16k 변환→STT→텍스트/오디오 감정 분석→임시파일 자동 삭제
+    업로드된 파일을 임시 디렉토리에 저장 -> 16k 변환 -> STT -> 텍스트/오디오 감정 분석 -> 임시파일 자동 삭제
     """
     with tempfile.TemporaryDirectory() as td:
         in_path = os.path.join(td, "input.wav")
-        # chunk 단위 저장
         with open(in_path, "wb") as f:
             for chunk in django_file.chunks():
                 f.write(chunk)
-
-        # 16k 변환
         p16 = ensure_16k_mono(in_path)
-
-        # 1) STT
         text = transcribe_whisper(p16, lang=lang)
-
-        # 2) 텍스트 감정
         text_result = analyze_text_emotion(text)
-
-        # 3) 오디오 감정
         audio_result = analyze_audio_emotion(p16)
 
-        # TemporaryDirectory 컨텍스트를 벗어나면 파일 자동 삭제
         return {
             "stt_text": text,
-            "text_emotion": text_result,  # {"percent": {...}, "total": int, "details": [...], "text": str}
-            "audio_emotion": audio_result,  # {"probs": {...}, "top1": {...}}
+            "text_emotion": text_result,
+            "audio_emotion": audio_result,
         }
