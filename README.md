@@ -97,23 +97,5 @@ STT: faster-whisper
 
 요약: OpenAI GPT (gpt-4o-mini)
 
-## 실행 방법
-1. 환경 변수 설정
-``` bash
-export OPENAI_API_KEY=your_openai_api_key
-```
-2. Python 의존성 설치
-``` bash
-pip install -r requirements.txt
-```
-3. 파이프라인 실행
-``` python
-from pipeline import run_pipeline_on_uploaded_file
-
-result = run_pipeline_on_uploaded_file(django_file, gender="MALE", lang="ko")
-print(result)
-```
-
 ## 라이선스
 이 프로젝트는 오픈소스로 공개됩니다.  자유롭게 사용 및 기여해 주세요.
----
