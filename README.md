@@ -38,6 +38,24 @@
    - OpenAI GPT(`gpt-4o-mini`)로 공감적인 한국어 요약 생성
 
 ---
+
+## 설치 및 사용 방법
+
+### 1. 저장소 클론
+```bash
+git clone https://github.com/username/emotion-analysis-pipeline.git
+cd emotion-analysis-pipeline
+```
+2. 의존성 설치
+```bash
+pip install -r requirements.txt
+```
+3. 환경 변수 설정
+OpenAI API Key를 환경 변수로 등록합니다.
+
+```bash
+export OPENAI_API_KEY=your_openai_api_key
+```
 ## 요청 형식 (Input Format)
 
 입력: Django UploadedFile 객체 (예: request.FILES['audio'])
