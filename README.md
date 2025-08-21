@@ -177,8 +177,6 @@ GPU 사용: torch.cuda.is_available()에 따라 자동 선택. Whisper compute_t
 
 라이선스 & 크레딧
 
-모델과 코드의 라이선스는 각 리포의 LICENSE를 따릅니다.
-
-모델 정보는 같은 model 
+모델과 코드의 라이선스는 각 레포지토리의 LICENSE를 따릅니다. (MIT LICENSE)
 
 Whisper 모델: faster-whisper
