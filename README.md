@@ -87,6 +87,7 @@ KO(텍스트) → EN(오디오)로 투영 후, 텍스트 0.7 + 오디오 0.3 가
 
 빠른 사용 예시 (Django view)
 # views.py
+``` python
 from django.http import JsonResponse
 from .utils import run_pipeline_on_uploaded_file
 
@@ -98,7 +99,7 @@ def analyze_view(request):
     lang = request.POST.get("lang", "ko")
     result = run_pipeline_on_uploaded_file(request.FILES["file"], gender=gender, lang=lang)
     return JsonResponse(result, json_dumps_params={"ensure_ascii": False})
-
+```
 
 curl 테스트:
 
@@ -108,6 +109,7 @@ curl -X POST http://localhost:8000/api/diary/analyze \
   -F "lang=ko"
 
 스탠드얼론 테스트 (파이프라인 함수 직접 호출)
+``` python
 from pathlib import Path
 from types import SimpleNamespace
 from .utils import run_pipeline_on_uploaded_file
@@ -124,18 +126,18 @@ class FileObj:
 wav = FileObj("/path/to/sample.wav")
 res = run_pipeline_on_uploaded_file(wav, gender="FEMALE", lang="ko")
 print(res)
-
+```
 내부 구현 상세 (핵심 포인트)
 
 텍스트 모델 로딩
-
+``` python
 _tok = AutoTokenizer.from_pretrained("HyukII/text-emotion-model", use_fast=True)
 _text_model = AutoModelForSequenceClassification.from_pretrained(...).eval()
 # id2label은 config.json 우선, 없으면 label_map.json 다운로드 사용
-
+```
 
 오디오 모델/라벨/베이스라인 로딩 (HF 직행)
-
+``` python
 from huggingface_hub import hf_hub_download
 from importlib.machinery import SourceFileLoader
 
@@ -143,7 +145,7 @@ from importlib.machinery import SourceFileLoader
 # model.py 다운로드 → SourceFileLoader로 PyTorchAudioModel 로드
 # pytorch_model.pth 다운로드 → state_dict 로드
 # baseline_mean|std_{male|female}.npy 다운로드 → delta 정규화
-
+```
 
 오디오 입력 & 정규화
 
