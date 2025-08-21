@@ -181,23 +181,23 @@ _M_KO2EN = np.array(
 
 ### 주의/팁
 
-요약 비활성화: OPENAI_API_KEY가 없으면 자동으로 실패 메시지를 넣고 넘어갑니다.
+#### 요약 비활성화
+OPENAI_API_KEY가 없으면 자동으로 실패 메시지를 넣고 넘어갑니다.
 운영에서 요약이 꼭 필요 없다면 empathetic_summary()를 건너뛰도록 수정하세요.
 
-GPU 사용: torch.cuda.is_available()에 따라 자동 선택. Whisper compute_type도 자동 조정(float16/int8).
+#### GPU 사용
+torch.cuda.is_available()에 따라 자동 선택. Whisper compute_type도 자동 조정(float16/int8).
 
-캐시: huggingface_hub는 다운로드 파일을 로컬 캐시에 보관합니다(오프라인 재사용 가능).
+#### 캐시
+huggingface_hub는 다운로드 파일을 로컬 캐시에 보관합니다(오프라인 재사용 가능).
 
-경고 억제: TOKENIZERS_PARALLELISM=false 권장(Django dev server의 autoreload/fork 시 경고 방지).
+#### 경고 방지 설정
+TOKENIZERS_PARALLELISM=false 권장(Django dev server의 autoreload/fork 시 경고 방지).
 
-라벨 순서 불일치 주의:
-
+#### 라벨 순서 불일치 주의
 오디오 labels.json과 매핑 행렬(EN)의 순서가 반드시 일치해야 합니다.
-
 텍스트 라벨 순서는 텍스트 모델의 id2label에 따릅니다.
 
-라이선스 & 크레딧
-
+#### 라이선스 & 크레딧
 모델과 코드의 라이선스는 각 레포지토리의 LICENSE를 따릅니다. (MIT LICENSE)
-
 Whisper 모델: faster-whisper
