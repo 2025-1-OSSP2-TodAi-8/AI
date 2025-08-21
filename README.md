@@ -1,76 +1,204 @@
-# 감정 분석 AI엔진 
+# 감정 분석 로직
 
-####  본 프로젝트는 한국어 일기 텍스트와 음성 데이터를 활용한 감정 분석 앱을 개발하는 과정에서 사용된 텍스트 기반 감정 분류 모델을 포함하고 있다. 
-####  이는 앱 시나리오의 핵심 기능인 “오늘 하루는 어떠셨나요?” 질문에 대한 감정 분석 단계에 해당한다.
+음성(오디오)과 텍스트를 함께 사용해 감정을 분석하고, 공감형 요약을 생성하는 파이프라인입니다.
+utils.py 하나로 동작하며, 모델/가중치/베이스라인 벡터는 Hugging Face Hub에서 자동으로 다운로드합니다.
 
-___________________________________________________________________________
+### 구성 요소
 
-## 🎤 1. 음성 분석 모델 
+#### STT
+- faster-whisper (large-v3)
 
-### 📌 1. 개요
-- 사용자의 녹음 음성을 입력받아 음향적 특징을 추출하고 감정을 분류하는 모델
-- 텍스트 분석 모델과 달리, 목소리의 억양·속도·에너지·스펙트럼 변화 등을 활용해 감정을 감지
-- 일기 텍스트가 긍정적으로 작성되더라도, 목소리 톤이 우울하다면 실제 감정을 보완적으로 파악할 수 있음
-  
+#### 텍스트 감정 분류
+- HyukII/text-emotion-model (Transformers)
 
+#### 오디오 감정 분류
+- HyukII/audio-emotion-model
 
-### 🛠️ 2. 특징 추출 (Feature Extraction)
-본 프로젝트에서는 음성에서 MFCC(Mel-Frequency Cepstral Coefficients)정보를 추출하고 있음
-- MFCC (Mel-Frequency Cepstral Coefficients): 음성의 주파수 스펙트럼을 요약한 13차원 계수
-- 고정된 시퀀스 길이: 100 프레임으로 맞추어 CNN-LSTM 모델에 입력 가능
-- 패딩 / 자르기 처리: 발화 길이가 짧으면 0으로 패딩, 길면 잘라냄
-- 사용 라이브러리: librosa, numpy
+#### PyTorch 커스텀 모델(model.py) + 가중치(pytorch_model.pth)
 
+#### 베이스라인 벡터(baseline_mean_*.npy, baseline_std_*.npy) — (X−mean)/(std+1e−8)
 
+#### 요약 처리
+- OpenAI Chat Completions (gpt-4o-mini)
 
-### 🔎 3. 모델 구조
-- CNN + BiLSTM 기반 시퀀스 모델
-- Conv1D → 음향 스펙트럼 특징 추출
-- BiLSTM → 시간적 변화 패턴 학습
-- Dense + Softmax → 감정 클래스 확률 출력
+# Python 3.9+
+``` command
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu  # (GPU면 본인 환경에 맞게)
+pip install transformers huggingface_hub safetensors
+pip install faster-whisper librosa soundfile numpy
+pip install openai  # 요약을 쓸 경우
+```
 
+개발 서버에서 토크나이저 경고를 줄이려면 환경변수 설정:
+TOKENIZERS_PARALLELISM=false
 
-### ⚙️ 4.학습 방법
+## 환경 변수
 
-4.1. 데이터셋 구성
-- 훈련 데이터 : AiHub의 '감정 음성 데이터셋' (https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&dataSetSn=637)
-- 사용자 음성 → 9~13차원 특징 벡터(MFCC 등) 시퀀스로 변환
-- 레이블: 감정 클래스 (예: JOY, SAD, ANGRY 등)
-- 불균형 보완: 데이터 증강(속도 변환, 피치 쉬프트)
+OPENAI_API_KEY (선택): 요약 생성에 필요. 없으면 "summary": "(요약 실패) ..." 형태로 반환됨.
 
-4.2. 훈련 전략
-- 입력: (시퀀스 길이, feature_dim) 형태의 음성 특징 시퀀스
-- 출력: 감정 확률 분포 (Softmax)
-- 손실 함수: CrossEntropyLoss
-- 옵티마이저: AdamW, learning rate scheduling 적용
+현재 utils.py는 아래 고정된 HF 리포를 사용합니다.
 
-4.3. 중립 벡터 기반 분석 (Delta Approach)
-- 남자, 여자용  Neutral Baseline Vector를 먼저 저장
-- 새로운 발화 입력 시 → Δ = (현재 벡터 – baseline) 계산
-- Δ 벡터를 모델에 입력하여 개인화된 감정 예측 가능
+텍스트: HyukII/text-emotion-model
 
+오디오 : HyukII/audio-emotion-model
 
+입력/출력 형식
+입력
 
-__________________________________________________________________________________________
+음성 파일: .wav
 
+내부에서 ensure_16k_mono()로 16kHz mono 변환 후 처리
 
-## 2. 📝 텍스트 기반 감정 분석 모델
+옵션 파라미터:
 
-### 📌 1. 개요
-- 사용자가 작성하거나 음성에서 변환된 텍스트 데이터를 입력으로 받아 감정을 분류하는 모델.
-- 한국어에 특화된 klue/roberta-base 사전학습 언어모델을 파인튜닝하여 구현되었다.
-- 앱에서 녹음된 음성은 STT(Speech-to-Text) 과정을 거쳐 텍스트로 변환되며, 택스트 모델의 입력값으로 사용된다.
+gender: "MALE" 또는 "FEMALE" (오디오 정규화용 베이스라인 선택)
 
+lang: STT 언어 코드 (기본 "ko")
 
+출력(JSON)
+```json
+{
+  "summary": "공감형 한두 문장 요약(또는 요약 실패 메시지)",
+  "emotion_analysis": [p0, p1, p2, p3, p4, p5]
+}
+```
 
-### ⚙️ 2. 모델 구조
-- Pre-trained Model: KLUE RoBERTa Base
-- Fine-tuning Task: Multi-class text classification
-- 출력 라벨 예시:	['ANGRY', 'SAD', 'JOY', 'FEAR', 'SURPRISE', 'DISGUST']
+emotion_analysis는 한국어 6라벨 순서로 확률(0~1) 배열을 제공합니다.
+라벨 순서는 텍스트 모델의 id2label에서 가져오며, 기본은:
 
+['기쁨', '당황', '분노', '불안', '상처', '슬픔']
 
-### 🛠️ 3. 학습 방법
-1.	데이터 준비
-- AiHub의 '공감형 대화' (https://aihub.or.kr/aihubdata/data/view.do?currMenu=115&topMenu=100&dataSetSn=7130)
+## 동작 흐름
 
+STT: Whisper로 업로드된 음성을 텍스트로 전사
 
+텍스트 감정: 문장 단위 추론 → 감정 비율(%) 산출(KO 6라벨)
+
+오디오 감정:
+
+MFCC(13ch) 추출, 길이 100 프레임으로 패딩/자르기 → (100,13)
+
+성별별 베이스라인(mean/std)을 HF에서 .npy로 다운로드 후 delta=(X-mean)/(std+1e-8)
+
+텐서 (1,13,100)로 변환하여 오디오 모델 추론 → EN 6라벨 확률
+
+라벨 매핑 & 융합:
+
+KO(텍스트) → EN(오디오)로 투영 후, 텍스트 0.7 + 오디오 0.3 가중합
+
+다시 EN → KO로 근사 역투영 → 최종 KO 확률 벡터
+
+요약: 입력 텍스트를 공감형으로 1–2문장 요약(옵션)
+### 최종 결과
+
+<img width="800" height="200" alt="image" src="https://github.com/user-attachments/assets/85639f9f-6f75-4fd8-a37d-accc1ec8ce26" />
+
+# 사용 예시 (Django view)
+### views.py
+``` python
+from django.http import JsonResponse
+from .utils import run_pipeline_on_uploaded_file
+
+def analyze_view(request):
+    if request.method != "POST" or "file" not in request.FILES:
+        return JsonResponse({"error": "POST 파일 업로드 필요"}, status=400)
+
+    gender = request.POST.get("gender", "MALE")  # "MALE" | "FEMALE"
+    lang = request.POST.get("lang", "ko")
+    result = run_pipeline_on_uploaded_file(request.FILES["file"], gender=gender, lang=lang)
+    return JsonResponse(result, json_dumps_params={"ensure_ascii": False})
+```
+
+stand alone 테스트 (파이프라인 함수 직접 호출)
+``` python
+from pathlib import Path
+from types import SimpleNamespace
+from .utils import run_pipeline_on_uploaded_file
+
+class FileObj:
+    def __init__(self, p): self.p=p
+    def chunks(self, size=8192):
+        with open(self.p, "rb") as f:
+            while True:
+                b=f.read(size)
+                if not b: break
+                yield b
+
+wav = FileObj("/path/to/sample.wav")
+res = run_pipeline_on_uploaded_file(wav, gender="FEMALE", lang="ko")
+print(res)
+```
+# 내부 구현 상세 (utils.py)
+
+텍스트 모델 로딩
+``` python
+_tok = AutoTokenizer.from_pretrained("HyukII/text-emotion-model", use_fast=True)
+_text_model = AutoModelForSequenceClassification.from_pretrained(...).eval()
+# id2label은 config.json 우선, 없으면 label_map.json 다운로드 사용
+```
+
+오디오 모델/라벨/베이스라인 로딩 (HF 직행)
+``` python
+from huggingface_hub import hf_hub_download
+from importlib.machinery import SourceFileLoader
+
+# labels.json 다운로드 → 리스트
+# model.py 다운로드 → SourceFileLoader로 PyTorchAudioModel 로드
+# pytorch_model.pth 다운로드 → state_dict 로드
+# baseline_mean|std_{male|female}.npy 다운로드 → delta 정규화
+```
+
+오디오 입력 & 정규화
+
+MFCC: librosa.feature.mfcc(..., n_mfcc=13).T → (T,13)
+
+길이 100 프레임으로 패딩/슬라이스 → (100,13)
+
+delta = (X - mean) / (std + 1e-8)
+
+텐서 (1,13,100)로 변환 후 모델 추론
+
+라벨 매핑 행렬
+
+EN 라벨(오디오): labels.json (기본 ["ANGRY", "SAD", "DISGUST", "HAPPY", "FEAR", "SURPRISE"])
+
+KO 라벨(텍스트): ['기쁨', '당황', '분노', '불안', '상처', '슬픔']
+
+한국어로 표현된 감정을 영어 감정으로 획일화
+``` python
+# -------------------- 라벨 매핑 & 융합 --------------------
+# 권장 전이행렬 (열=KO: [기쁨, 당황, 분노, 불안, 상처, 슬픔], 행=EN: [ANGRY,SAD,DISGUST,HAPPY,FEAR,SURPRISE])
+_M_KO2EN = np.array(
+    [
+        [0.0, 0.0, 1.0, 0.0, 0.2, 0.0],  # ANGRY   <- 분노(1.0), 상처(0.2)
+        [0.0, 0.0, 0.0, 0.0, 0.6, 1.0],  # SAD     <- 슬픔(1.0), 상처(0.6)
+        [0.0, 0.0, 0.0, 0.0, 0.2, 0.0],  # DISGUST <- 상처(0.2)
+        [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # HAPPY   <- 기쁨(1.0)
+        [0.0, 0.3, 0.0, 0.8, 0.0, 0.0],  # FEAR    <- 불안(0.8), 당황(0.3)
+        [0.0, 0.7, 0.0, 0.2, 0.0, 0.0],  # SURPRISE<- 당황(0.7), 불안(0.2)
+    ],
+    dtype=np.float32,
+
+```
+텍스트 0.7, 오디오 0.3 비율로 융합 (원하면 fuse_text_audio(..., w_text, w_audio) 조정)
+
+### 주의/팁
+
+#### 요약 비활성화
+- OPENAI_API_KEY가 없으면 자동으로 실패 메시지를 넣고 넘어갑니다. 운영에서 요약이 꼭 필요 없다면 empathetic_summary()를 건너뛰도록 수정하세요.
+
+#### GPU 사용
+- torch.cuda.is_available()에 따라 자동 선택. Whisper compute_type도 자동 조정(float16/int8).
+
+#### 캐시
+- huggingface_hub는 다운로드 파일을 로컬 캐시에 보관합니다(오프라인 재사용 가능).
+
+#### 경고 방지 설정
+- TOKENIZERS_PARALLELISM=false 권장(Django dev server의 autoreload/fork 시 경고 방지).
+
+#### 라벨 순서 불일치 주의
+- 오디오 labels.json과 매핑 행렬(EN)의 순서가 반드시 일치해야 합니다. 텍스트 라벨 순서는 텍스트 모델의 id2label에 따릅니다.
+
+#### 라이선스 & 크레딧
+- 모델과 코드의 라이선스는 각 레포지토리의 LICENSE를 따릅니다. (MIT LICENSE)
+- Whisper 모델: faster-whisper
