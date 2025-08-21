@@ -90,7 +90,6 @@ KO(텍스트) → EN(오디오)로 투영 후, 텍스트 0.7 + 오디오 0.3 가
 
 <img width="800" height="200" alt="image" src="https://github.com/user-attachments/assets/85639f9f-6f75-4fd8-a37d-accc1ec8ce26" />
 
-
 # 사용 예시 (Django view)
 ### views.py
 ``` python
