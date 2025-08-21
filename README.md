@@ -45,7 +45,7 @@ OPENAI_API_KEY (선택): 요약 생성에 필요. 없으면 "summary": "(요약 
 입력/출력 형식
 입력
 
-음성 파일: .wav (다른 샘플링이어도 OK)
+음성 파일: .wav
 
 내부에서 ensure_16k_mono()로 16kHz mono 변환 후 처리
 
