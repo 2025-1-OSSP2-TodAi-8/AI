@@ -18,11 +18,11 @@
    - [faster-whisper](https://github.com/guillaumekln/faster-whisper)로 한국어 음성 → 텍스트 변환
 
 4. **텍스트 감정 분석**
-   - `HyukII/text-emotion-model`
+   - `HyukII/text-emotion-model` (model repository 참고)
    - 감정 레이블: `['기쁨','당황','분노','불안','상처','슬픔']`
 
 5. **오디오 감정 분석**
-   - `HyukII/audio-emotion-model`
+   - `HyukII/audio-emotion-model` (model repository 참고)
    - 모델 출력 레이블: `[ANGRY, SAD, DISGUST, HAPPY, FEAR, SURPRISE]`
 
 6. **라벨 매핑 & 융합**
