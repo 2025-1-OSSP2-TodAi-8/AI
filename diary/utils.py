@@ -8,7 +8,11 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # -------------------- 경로/장치 --------------------
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
 TEXT_DIR = os.path.join(BASE_DIR, "text")
-AUDIO_STATE_PATH = os.path.join(BASE_DIR, "audio", "pytorch_model.pth")
+
+AUDIO_DIR = os.path.join(BASE_DIR, "audio")
+AUDIO_STATE_PATH = os.path.join(AUDIO_DIR, "pytorch_model.pth")
+LABELS_PATH = os.path.join(AUDIO_DIR, "labels.json")
+
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 compute_type = "float16" if device.type == "cuda" else "int8"
@@ -72,125 +76,53 @@ def analyze_text_emotion(text: str, max_len=256):
 
 
 # -------------------- 오디오 감정 모델 --------------------
-class PyTorchAudioModel(nn.Module):
-    def __init__(self, num_labels=6):
-        super().__init__()
-        self.conv1 = nn.Conv1d(13, 64, kernel_size=5, padding="same")
-        self.bn1 = nn.BatchNorm1d(64)
-        self.pool1 = nn.MaxPool1d(2, 2)
-        self.conv2 = nn.Conv1d(64, 128, kernel_size=3, padding="same")
-        self.bn2 = nn.BatchNorm1d(128)
-        self.pool2 = nn.MaxPool1d(2, 2)
-        self.bilstm = nn.LSTM(128, 64, bidirectional=True, batch_first=True)
-        self.dense1 = nn.Linear(128, 128)
-        self.dense2 = nn.Linear(128, num_labels)
+# audio/model.py 에서 클래스 가져오기
+from .audio.model import PyTorchAudioModel  # 앱 패키지로 실행
 
-    def forward(self, x):
-        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
-        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
-        x = x.permute(0, 2, 1)  # (B,C,L)->(B,L,C)
-        _, (h_n, _) = self.bilstm(x)
-        x = torch.cat([h_n[-2], h_n[-1]], dim=1)
-        x = F.relu(self.dense1(x))
-        return self.dense2(x)
-
+try:
+    with open(LABELS_PATH, "r", encoding="utf-8") as f:
+        EMOTION_LABELS_EN = json.load(
+            f
+        )  # 예: ["ANGRY","SAD","DISGUST","HAPPY","FEAR","SURPRISE"]
+    assert isinstance(EMOTION_LABELS_EN, list) and len(EMOTION_LABELS_EN) == 6
+except Exception:
+    EMOTION_LABELS_EN = ["ANGRY", "SAD", "DISGUST", "HAPPY", "FEAR", "SURPRISE"]
 
 _audio_model = PyTorchAudioModel(num_labels=6).to(device)
 _audio_model.load_state_dict(torch.load(AUDIO_STATE_PATH, map_location=device))
 _audio_model.eval()
 
-EMOTION_LABELS_EN = [
-    "ANGRY",
-    "SAD",
-    "DISGUST",
-    "HAPPY",
-    "FEAR",
-    "SURPRISE",
-]  # 출력 순서(오디오)
-
 # ---- Baseline (남/여) ----
-BASE_LINE_MEAN_MALE = np.array(
-    [
-        -488.7764,
-        75.9438,
-        6.369161,
-        21.888578,
-        5.252565,
-        12.948459,
-        -2.9029474,
-        2.1715217,
-        6.144363,
-        2.0456758,
-        -4.0672646,
-        1.4047805,
-        -0.85426885,
-    ],
-    dtype=np.float32,
-)
-BASE_LINE_STD_MALE = np.array(
-    [
-        11.675788,
-        12.669461,
-        5.7222886,
-        4.909043,
-        4.4742537,
-        5.8538017,
-        3.2380152,
-        4.0887833,
-        1.9294198,
-        2.4097118,
-        2.7102668,
-        1.6911668,
-        1.7729696,
-    ],
-    dtype=np.float32,
-)
+BASELINE_FILES = {
+    "MALE": {
+        "mean": os.path.join(AUDIO_DIR, "baseline_mean_male.npy"),
+        "std": os.path.join(AUDIO_DIR, "baseline_std_male.npy"),
+    },
+    "FEMALE": {
+        "mean": os.path.join(AUDIO_DIR, "baseline_mean_female.npy"),
+        "std": os.path.join(AUDIO_DIR, "baseline_std_female.npy"),
+    },
+}
 
-BASE_LINE_MEAN_FEMALE = np.array(
-    [
-        -460.19843,
-        46.570786,
-        1.1123316,
-        17.595436,
-        -0.57482404,
-        11.101548,
-        -7.8497324,
-        2.2953954,
-        -2.1675904,
-        -4.268735,
-        -4.0286107,
-        -5.2267838,
-        -6.829859,
-    ],
-    dtype=np.float32,
-)
-BASE_LINE_STD_FEMALE = np.array(
-    [
-        25.068605,
-        10.782973,
-        6.916395,
-        6.7128243,
-        3.8709269,
-        2.940329,
-        3.7364106,
-        2.884662,
-        2.534034,
-        2.1726286,
-        2.3333669,
-        2.8525667,
-        2.571768,
-    ],
-    dtype=np.float32,
-)
+
+def _load_baseline(gender: str):
+    g = (gender or "MALE").strip().upper()
+    if g not in BASELINE_FILES:
+        g = "MALE"
+    mean_path = BASELINE_FILES[g]["mean"]
+    std_path = BASELINE_FILES[g]["std"]
+
+    if not os.path.exists(mean_path) or not os.path.exists(std_path):
+        raise FileNotFoundError(
+            f"Baseline npy not found for {g}. " f"expected: {mean_path}, {std_path}"
+        )
+    mean = np.load(mean_path).astype(np.float32).reshape(-1)
+    std = np.load(std_path).astype(np.float32).reshape(-1)
+    return mean, std
 
 
 def _pick_baseline(gender: str):
-    g = (gender or "MALE").strip().upper()
-    if g == "FEMALE":
-        return BASE_LINE_MEAN_FEMALE, BASE_LINE_STD_FEMALE
-    # default MALE
-    return BASE_LINE_MEAN_MALE, BASE_LINE_STD_MALE
-
+    return _load_baseline(gender)
 
 # -------------------- 신호/전사 --------------------
 def ensure_16k_mono(in_path: str) -> str:
