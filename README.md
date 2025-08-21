@@ -38,8 +38,25 @@
    - OpenAI GPT(`gpt-4o-mini`)로 공감적인 한국어 요약 생성
 
 ---
+## 요청 형식 (Input Format)
 
-## 📦 반환 형식
+입력: Django UploadedFile 객체 (예: request.FILES['audioFile'])
+
+지원 파일 형식: .wav
+
+권장 샘플링 레이트: 16kHz mono (다른 경우 자동 변환됨)
+
+``` python
+from pipeline import run_pipeline_on_uploaded_file
+
+def upload_view(request):
+    if request.method == "POST":
+        audio_file = request.FILES["audioFile"]
+        result = run_pipeline_on_uploaded_file(audio_file, gender="MALE", lang="ko")
+        return JsonResponse(result)
+```
+
+## 반환 형식
 
 ```json
 {
@@ -65,7 +82,7 @@ STT: faster-whisper
 
 요약: OpenAI GPT (gpt-4o-mini)
 
-## 🚀 실행 방법
+## 실행 방법
 1. 환경 변수 설정
 ``` bash
 export OPENAI_API_KEY=your_openai_api_key
@@ -81,14 +98,7 @@ from pipeline import run_pipeline_on_uploaded_file
 result = run_pipeline_on_uploaded_file(django_file, gender="MALE", lang="ko")
 print(result)
 ```
-## 📂 반환 예시
-```python
-{
-  "summary": "기쁨과 설렘이 가득한 하루를 보내셨군요, 행복한 시간이셨을 것 같아요.",
-  "emotion": [0.78, 0.05, 0.04, 0.06, 0.03, 0.04],
-  "emotion_labels": ["HAPPY", "SAD", "ANGRY", "SURPRISE", "FEAR", "DISGUST"]
-}
-```
-📜 라이선스
+
+## 라이선스
 이 프로젝트는 오픈소스로 공개됩니다.  자유롭게 사용 및 기여해 주세요.
 ---
